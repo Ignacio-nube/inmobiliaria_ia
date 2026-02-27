@@ -1,6 +1,6 @@
 "use client";
 
-import { motion } from "framer-motion";
+import { motion, Variants } from "framer-motion";
 import { MapPin } from "lucide-react";
 import Image from "next/image";
 import { Database } from "@/lib/database.types";
@@ -14,32 +14,75 @@ interface PropertyCardProps {
     index?: number;
 }
 
+// Pulse animation for badges
+const badgePulseVariants: Variants = {
+    animate: {
+        boxShadow: [
+            "0 0 0 0px rgba(212, 175, 55, 0)",
+            "0 0 0 6px rgba(212, 175, 55, 0.15)",
+            "0 0 0 0px rgba(212, 175, 55, 0)",
+        ],
+        transition: {
+            duration: 2.4,
+            repeat: Infinity,
+            ease: "easeInOut",
+        },
+    },
+};
+
 export function PropertyCard({ property, cardStyle, index = 0 }: PropertyCardProps) {
     const isClassic = cardStyle === 'classic';
 
     return (
-        <Link href={`/propiedades/${property.id}`} className="block">
+        <Link href={`/propiedades/${property.id}`} className="block h-full">
             <motion.div
-                initial={{ opacity: 0, y: 30 }}
+                initial={{ opacity: 0, y: 40 }}
                 whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true, margin: "-100px" }}
-                transition={{ duration: 0.5, delay: index * 0.1 }}
-                whileHover={{ y: -8, transition: { duration: 0.2 } }}
-                className={`group relative overflow-hidden bg-white shadow-sm transition-all duration-300 cursor-pointer flex flex-col h-full ${isClassic
-                        ? "rounded-none border-b-2 border-r-2 border-brand/20 hover:shadow-xl hover:border-gold"
-                        : "rounded-3xl border border-border/50 hover:shadow-2xl hover:shadow-gold/10"
+                viewport={{ once: true, margin: "-80px" }}
+                transition={{
+                    duration: 0.55,
+                    delay: index * 0.15,
+                    ease: [0.22, 1, 0.36, 1],
+                }}
+                whileHover={{
+                    y: -8,
+                    boxShadow: "0 20px 40px rgba(0,0,0,0.3)",
+                    transition: { type: "spring", stiffness: 300, damping: 22 },
+                }}
+                style={{ willChange: "transform" }}
+                className={`group relative overflow-hidden bg-card text-card-foreground border border-border cursor-pointer flex flex-col h-full ${isClassic
+                    ? "rounded-none border-b-2 border-r-2 hover:border-gold"
+                    : "rounded-2xl shadow-sm hover:border-brand/30"
                     }`}
             >
                 <div className={`aspect-[4/3] bg-muted relative overflow-hidden ${isClassic ? "rounded-none" : ""}`}>
                     <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent z-10" />
-                    <div className={`absolute bottom-4 z-20 flex gap-2 ${isClassic ? "left-1/2 -translate-x-1/2" : "left-4"}`}>
-                        <span className={`px-3 py-1 text-white text-xs font-semibold ${isClassic ? "bg-black/60 backdrop-blur-sm rounded-none tracking-widest uppercase" : "bg-white/20 backdrop-blur-md rounded-full"}`}>
+                    <div className={`absolute bottom-3 z-20 flex gap-2 ${isClassic ? "left-1/2 -translate-x-1/2" : "left-3"}`}>
+                        {/* "En Venta" badge */}
+                        <motion.span
+                            variants={badgePulseVariants}
+                            animate="animate"
+                            className={`px-2.5 py-1 text-white text-[11px] font-semibold ${isClassic
+                                ? "bg-black/60 backdrop-blur-sm rounded-none tracking-widest uppercase"
+                                : "bg-white/20 backdrop-blur-md rounded-full"
+                                }`}
+                        >
                             En Venta
-                        </span>
+                        </motion.span>
+
+                        {/* "Destacado" badge */}
                         {property.is_featured && (
-                            <span className={`px-3 py-1 text-white text-xs font-semibold ${isClassic ? "bg-gold rounded-none tracking-widest uppercase" : "bg-brand rounded-full"}`}>
+                            <motion.span
+                                variants={badgePulseVariants}
+                                animate="animate"
+                                className={`px-2.5 py-1 text-white text-[11px] font-semibold ${isClassic
+                                    ? "bg-gold rounded-none tracking-widest uppercase"
+                                    : "bg-gold rounded-full text-black"
+                                    }`}
+                                style={{ willChange: "box-shadow" }}
+                            >
                                 Destacado
-                            </span>
+                            </motion.span>
                         )}
                     </div>
                     {property.images && property.images.length > 0 ? (
@@ -47,30 +90,37 @@ export function PropertyCard({ property, cardStyle, index = 0 }: PropertyCardPro
                             src={property.images[0]}
                             alt={property.title}
                             fill
-                            className="object-cover transition-transform duration-500 group-hover:scale-110"
+                            className="object-cover transition-transform duration-500 group-hover:scale-105"
+                            style={{ willChange: "transform" }}
                         />
                     ) : (
-                        <div className="w-full h-full bg-slate-200 flex items-center justify-center text-slate-400 font-medium transition-transform duration-500 group-hover:scale-110">
+                        <div className="w-full h-full bg-muted flex items-center justify-center text-muted-foreground font-medium">
                             Sin imagen
                         </div>
                     )}
                 </div>
-                <div className={`p-6 flex-1 flex flex-col justify-between ${isClassic ? "text-center items-center" : ""}`}>
+                <div className={`p-5 flex-1 flex flex-col justify-between ${isClassic ? "text-center items-center" : ""}`}>
                     <div className="w-full">
-                        <div className={`flex items-start mb-2 gap-4 ${isClassic ? "justify-center" : "justify-between"}`}>
-                            <h3 className={`font-heading font-medium text-2xl line-clamp-1 ${isClassic ? "text-primary" : ""}`} title={property.title}>{property.title}</h3>
-                        </div>
-                        <span className={`font-brand font-bold text-xl text-brand mb-2 block ${isClassic ? "text-gold" : ""}`}>{property.currency} {property.price.toLocaleString()}</span>
-                        <div className={`flex items-center gap-1 text-muted-foreground text-sm mb-4 ${isClassic ? "justify-center" : ""}`}>
-                            <MapPin className="w-4 h-4 shrink-0" />
+                        <h3
+                            className={`font-heading font-medium text-lg leading-tight line-clamp-1 text-foreground ${isClassic ? "text-center" : ""}`}
+                            title={property.title}
+                        >
+                            {property.title}
+                        </h3>
+                        {/* Price — unified gold regardless of card style */}
+                        <span className="font-brand font-bold text-xl mt-1 mb-1.5 block text-gold">
+                            {property.currency} {property.price.toLocaleString()}
+                        </span>
+                        <div className={`flex items-center gap-1.5 text-sm text-muted-foreground ${isClassic ? "justify-center" : ""}`}>
+                            <MapPin className="w-3.5 h-3.5 shrink-0" />
                             <span className="truncate">{property.location}</span>
                         </div>
                     </div>
-                    <div className={`flex items-center gap-4 text-sm border-t pt-4 mt-auto w-full ${isClassic ? "text-muted-foreground justify-center border-border/20 uppercase tracking-wider text-xs" : "text-foreground/80 border-border"}`}>
+                    <div className={`flex items-center gap-3 text-xs text-muted-foreground border-t border-border pt-3 mt-3 w-full ${isClassic ? "justify-center uppercase tracking-wider" : ""}`}>
                         {property.bedrooms !== null && property.bedrooms > 0 && <span>{property.bedrooms} Dorm.</span>}
-                        {property.bedrooms !== null && property.bedrooms > 0 && <span className="w-1 h-1 rounded-full bg-muted-foreground flex-shrink-0" />}
+                        {property.bedrooms !== null && property.bedrooms > 0 && <span className="w-1 h-1 rounded-full bg-border flex-shrink-0" />}
                         {property.bathrooms !== null && property.bathrooms > 0 && <span>{property.bathrooms} Baños</span>}
-                        {property.bathrooms !== null && property.bathrooms > 0 && <span className="w-1 h-1 rounded-full bg-muted-foreground flex-shrink-0" />}
+                        {property.bathrooms !== null && property.bathrooms > 0 && <span className="w-1 h-1 rounded-full bg-border flex-shrink-0" />}
                         {property.square_meters !== null && <span>{property.square_meters} m²</span>}
                     </div>
                 </div>

@@ -1,12 +1,15 @@
 import { createClient } from "@/lib/supabase/server";
 import { MessagesTable } from "@/components/admin/MessagesTable";
 
-export const revalidate = 0; // Don't cache admin pages
+export const revalidate = 0;
+
+export const metadata = {
+    title: "Mensajes | Admin",
+};
 
 export default async function AdminMessagesPage() {
     const supabase = await createClient();
 
-    // Fetch all contacts/messages, ordered by newest
     const { data: messages, error } = await supabase
         .from("contacts")
         .select("*")
@@ -20,28 +23,29 @@ export default async function AdminMessagesPage() {
 
     return (
         <div>
-            <div className="flex flex-col md:flex-row items-center justify-between mb-8 gap-4">
+            <div className="flex flex-col md:flex-row items-start md:items-center justify-between mb-8 gap-4">
                 <div>
-                    <h1 className="text-3xl font-heading font-bold text-foreground mb-2">
-                        Bandeja de Mensajes
+                    <h1 className="text-3xl font-bold text-white tracking-tight mb-1">
+                        Mensajes
                     </h1>
-                    <p className="text-muted-foreground text-sm">
-                        Consultas recibidas desde los formularios de contacto de las propiedades.
+                    <p className="text-slate-400 text-sm">
+                        Consultas recibidas desde los formularios de contacto.
                     </p>
                 </div>
-                <div className="flex gap-4 items-center">
-                    <div className="px-4 py-2 bg-brand/10 text-brand border border-brand/20 rounded-xl font-medium text-sm">
-                        Nuevos: {unreadCount}
-                    </div>
-                    <div className="px-4 py-2 bg-card border border-border rounded-xl text-muted-foreground text-sm">
+                <div className="flex gap-3 items-center">
+                    {unreadCount > 0 && (
+                        <div className="px-4 py-2 bg-blue-500/10 text-blue-400 border border-blue-500/20 rounded-xl font-semibold text-sm flex items-center gap-2">
+                            <span className="w-2 h-2 bg-blue-400 rounded-full animate-pulse" />
+                            {unreadCount} nuevos
+                        </div>
+                    )}
+                    <div className="px-4 py-2 bg-slate-800/50 border border-slate-700/50 rounded-xl text-slate-400 text-sm">
                         Total: {messages?.length || 0}
                     </div>
                 </div>
             </div>
 
-            <div className="mt-8">
-                <MessagesTable messages={messages || []} />
-            </div>
+            <MessagesTable messages={messages || []} />
         </div>
     );
 }

@@ -37,6 +37,10 @@ export const viewport: Viewport = {
 };
 
 import { createClient } from "@/lib/supabase/server";
+import { ThemeProvider } from "@/components/layout/ThemeProvider";
+import { DynamicTheme } from "@/components/layout/DynamicTheme";
+import { generateColorShades } from "@/lib/colors";
+import { TourProvider } from "@/components/tour/TourProvider";
 
 export default async function RootLayout({
   children,
@@ -46,30 +50,61 @@ export default async function RootLayout({
   const supabase = await createClient();
   const { data: settings } = await supabase
     .from("site_settings")
-    .select("primary_color, accent_color, font_heading")
+    .select("primary_color, accent_color, font_heading, contact_address, contact_phone, contact_email, social_instagram, social_facebook, social_twitter")
     .limit(1)
     .single();
 
   const primaryColor = settings?.primary_color || "#1e3a8a";
   const accentColor = settings?.accent_color || "#d4af37";
+  const fontHeadingFamily = settings?.font_heading || '"Playfair Display", ui-serif, Georgia, serif';
 
-  // Decide which font CSS variable to use for headings
-  // E.g., if set to 'var(--font-playfair)' it uses the Playfair Display we imported
-  const fontHeadingVar = settings?.font_heading || "var(--font-heading)";
+  const brandShades = generateColorShades(primaryColor, 'brand');
+  const goldShades = generateColorShades(accentColor, 'gold');
+
+  // Build CSS variable string for :root override
+  const cssVars = [
+    ...Object.entries(brandShades).map(([k, v]) => `${k}: ${v};`),
+    ...Object.entries(goldShades).map(([k, v]) => `${k}: ${v};`),
+    `--color-brand: ${primaryColor};`,
+    `--color-gold: ${accentColor};`,
+    // Also override the CSS variable so any direct var() references work
+    `--font-heading: ${fontHeadingFamily};`,
+  ].join(' ');
 
   return (
-    <html lang="es" className="scroll-smooth">
+    <html lang="es" className="scroll-smooth" suppressHydrationWarning>
       <body
         className={`${inter.variable} ${outfit.variable} ${playfair.variable} font-sans antialiased min-h-screen flex flex-col`}
-        style={{
-          "--color-brand": primaryColor,
-          "--color-gold": accentColor,
-          "--font-heading": fontHeadingVar,
-        } as React.CSSProperties}
       >
-        <AppShell>
-          {children}
-        </AppShell>
+        {/*
+          Blocking script: forces dark class BEFORE React hydration.
+          This eliminates the flash of light theme on first load,
+          regardless of OS preference. Never reads matchMedia.
+        */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+              (function() {
+                try {
+                  var stored = localStorage.getItem('ignacio-theme');
+                  var theme = stored || 'dark';
+                  document.documentElement.classList.remove('light', 'dark');
+                  document.documentElement.classList.add(theme);
+                } catch(e) {
+                  document.documentElement.classList.add('dark');
+                }
+              })();
+            `
+          }}
+        />
+        <DynamicTheme cssVars={cssVars} fontHeadingFamily={fontHeadingFamily} />
+        <ThemeProvider attribute="class" defaultTheme="dark" enableSystem={false} storageKey="ignacio-theme">
+          <TourProvider>
+            <AppShell settings={settings || undefined}>
+              {children}
+            </AppShell>
+          </TourProvider>
+        </ThemeProvider>
       </body>
     </html>
   );

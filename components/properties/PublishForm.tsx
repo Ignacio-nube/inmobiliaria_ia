@@ -1,35 +1,101 @@
 "use client";
 
-import { useState } from 'react';
-import { createClient } from '@/lib/supabase/client'; // Client-side Supabase
-import { useRouter } from 'next/navigation';
-import { Loader2 } from 'lucide-react';
-import { Database } from '@/lib/database.types';
+import { useState, useTransition } from "react";
+import { createBrowserClient } from "@supabase/ssr";
+import { Database } from "@/lib/database.types";
+import { useRouter } from "next/navigation";
+import {
+    Loader2, Upload, MapPin, Bed, Bath, Square, DollarSign,
+    Car, Calendar, Ruler, Tag, Building2, Sparkles, ImageIcon, X, AlertCircle
+} from "lucide-react";
+import Image from "next/image";
 
-type Property = Database['public']['Tables']['properties']['Row'];
+type PropertyInsert = Database['public']['Tables']['properties']['Insert'];
 
 interface PublishFormProps {
-    initialData?: Property;
+    initialData?: Database['public']['Tables']['properties']['Row'] | null;
+    isAdminEdit?: boolean;
 }
 
-export function PublishForm({ initialData }: PublishFormProps) {
+const PROPERTY_TYPES = ['Casa', 'Departamento', 'Terreno', 'Local', 'Oficina', 'Duplex'];
+const OPERATIONS = ['venta', 'alquiler', 'alquiler_temporal'];
+const CONDITIONS = ['nuevo', 'bueno', 'a_refaccionar'];
+const OPERATION_LABELS: Record<string, string> = { venta: 'Venta', alquiler: 'Alquiler', alquiler_temporal: 'Alquiler Temporal' };
+const CONDITION_LABELS: Record<string, string> = { nuevo: 'A Estrenar', bueno: 'Buen Estado', a_refaccionar: 'A Refaccionar' };
+
+const AMENITY_OPTIONS = [
+    'pileta', 'quincho', 'parrilla', 'seguridad', 'ascensor', 'jardin',
+    'cochera_cubierta', 'vestidor', 'deposito', 'vidriera', 'alta_visibilidad',
+    'vista_panoramica', 'servicios_completos', 'lavadero', 'terraza', 'calefaccion'
+];
+
+function FormSection({ icon, title, children }: { icon: React.ReactNode; title: string; children: React.ReactNode }) {
+    return (
+        <div className="bg-card border border-border rounded-2xl p-6 space-y-4">
+            <h3 className="text-base font-semibold text-foreground flex items-center gap-2 pb-2 border-b border-border">
+                <span className="text-brand">{icon}</span>
+                {title}
+            </h3>
+            {children}
+        </div>
+    );
+}
+
+function FieldLabel({ children, required }: { children: React.ReactNode; required?: boolean }) {
+    return (
+        <label className="text-sm font-medium text-muted-foreground mb-1 block">
+            {children}
+            {required && <span className="text-red-400 ml-0.5">*</span>}
+        </label>
+    );
+}
+
+const inputCls = "w-full bg-background border border-border rounded-xl px-4 py-3 text-sm text-foreground focus:ring-2 focus:ring-brand outline-none transition-all placeholder:text-muted-foreground/50";
+const selectCls = `${inputCls} cursor-pointer`;
+
+export function PublishForm({ initialData, isAdminEdit = false }: PublishFormProps) {
     const router = useRouter();
-    const supabase = createClient();
-    const [loading, setLoading] = useState(false);
-    const [errorMsg, setErrorMsg] = useState<string | null>(null);
+    const [isPending, startTransition] = useTransition();
+    const [submitted, setSubmitted] = useState(false);
+    const [errorMsg, setErrorMsg] = useState("");
 
     const [formData, setFormData] = useState({
         title: initialData?.title || '',
         description: initialData?.description || '',
         property_type: initialData?.property_type || 'Casa',
+        operation_type: initialData?.operation_type || 'venta',
         price: initialData?.price?.toString() || '',
         currency: initialData?.currency || 'USD',
         location: initialData?.location || '',
+        address: initialData?.address || '',
+        neighborhood: initialData?.neighborhood || '',
+        city: initialData?.city || 'San Miguel de Tucumán',
+        province: initialData?.province || 'Tucumán',
         bedrooms: initialData?.bedrooms?.toString() || '',
         bathrooms: initialData?.bathrooms?.toString() || '',
         square_meters: initialData?.square_meters?.toString() || '',
-        imagesStr: initialData?.images?.join(', ') || ''
+        lot_meters: initialData?.lot_meters?.toString() || '',
+        garage: initialData?.garage?.toString() || '0',
+        year_built: initialData?.year_built?.toString() || '',
+        condition: initialData?.condition || 'bueno',
+        expenses: initialData?.expenses?.toString() || '',
+        latitude: initialData?.latitude?.toString() || '',
+        longitude: initialData?.longitude?.toString() || '',
+        imagesStr: initialData?.images?.join('\n') || '',
     });
+
+    const [selectedAmenities, setSelectedAmenities] = useState<string[]>(initialData?.amenities || []);
+
+    const previewImages = formData.imagesStr
+        .split(/[\n,]/)
+        .map(s => s.trim())
+        .filter(s => s.length > 0 && s.startsWith('http'));
+
+    const toggleAmenity = (a: string) => {
+        setSelectedAmenities(prev =>
+            prev.includes(a) ? prev.filter(x => x !== a) : [...prev, a]
+        );
+    };
 
     const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
         setFormData({ ...formData, [e.target.name]: e.target.value });
@@ -37,152 +103,284 @@ export function PublishForm({ initialData }: PublishFormProps) {
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        setLoading(true);
-        setErrorMsg(null);
+        setErrorMsg("");
 
-        // Parse inputs
-        const images = formData.imagesStr
-            .split(',')
-            .map(url => url.trim())
-            .filter(url => url.length > 0);
+        startTransition(async () => {
+            const supabase = createBrowserClient<Database>(
+                process.env.NEXT_PUBLIC_SUPABASE_URL!,
+                process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+            );
 
-        const priceNum = parseFloat(formData.price) || 0;
-        const bedNum = parseInt(formData.bedrooms) || null;
-        const bathNum = parseFloat(formData.bathrooms) || null;
-        const sqMetersNum = parseFloat(formData.square_meters) || null;
+            const images = formData.imagesStr
+                .split(/[\n,]/)
+                .map(s => s.trim())
+                .filter(s => s.length > 0);
 
-        try {
-            const payload = {
+            const propertyData: PropertyInsert = {
                 title: formData.title,
                 description: formData.description,
                 property_type: formData.property_type,
-                price: priceNum,
+                operation_type: formData.operation_type,
+                price: parseFloat(formData.price),
                 currency: formData.currency,
                 location: formData.location,
-                bedrooms: bedNum,
-                bathrooms: bathNum,
-                square_meters: sqMetersNum,
-                images: images,
-                published: initialData ? initialData.published : true,
-                is_featured: initialData ? initialData.is_featured : false
+                address: formData.address || null,
+                neighborhood: formData.neighborhood || null,
+                city: formData.city,
+                province: formData.province,
+                bedrooms: formData.bedrooms ? parseInt(formData.bedrooms) : null,
+                bathrooms: formData.bathrooms ? parseInt(formData.bathrooms) : null,
+                square_meters: formData.square_meters ? parseFloat(formData.square_meters) : null,
+                lot_meters: formData.lot_meters ? parseFloat(formData.lot_meters) : null,
+                garage: formData.garage ? parseInt(formData.garage) : 0,
+                year_built: formData.year_built ? parseInt(formData.year_built) : null,
+                condition: formData.condition,
+                expenses: formData.expenses ? parseFloat(formData.expenses) : null,
+                latitude: formData.latitude ? parseFloat(formData.latitude) : null,
+                longitude: formData.longitude ? parseFloat(formData.longitude) : null,
+                images,
+                amenities: selectedAmenities,
+                ...(isAdminEdit ? {} : { approval_status: 'pending', published: false }),
             };
 
-            const query = initialData
-                ? supabase.from('properties').update(payload).eq('id', initialData.id)
-                : supabase.from('properties').insert(payload);
-
-            const { error } = await query;
-
-            if (error) {
-                console.error("Supabase Error:", error);
-                throw error;
-            }
-
-            // Success, wait a sec and redirect
-            if (initialData) {
-                router.push('/admin'); // Return to admin if it's an edit
+            if (initialData?.id) {
+                const { error } = await supabase
+                    .from('properties')
+                    .update(propertyData)
+                    .eq('id', initialData.id);
+                if (error) { setErrorMsg(error.message); return; }
+                if (isAdminEdit) {
+                    router.push('/admin/propiedades');
+                    router.refresh();
+                } else {
+                    setSubmitted(true);
+                }
             } else {
-                router.push('/propiedades'); // Go to properties listing if it's new
+                const { error } = await supabase
+                    .from('properties')
+                    .insert(propertyData);
+                if (error) { setErrorMsg(error.message); return; }
+                setSubmitted(true);
             }
-            router.refresh(); // Refresh properties cache
-
-        } catch (err: any) {
-            console.error(err);
-            if (err.message) {
-                setErrorMsg(err.message);
-            } else if (err.code && err.details) {
-                setErrorMsg(`${err.code}: ${err.details}`);
-            } else {
-                setErrorMsg(JSON.stringify(err) === '{}' ? "Error de permisos o base de datos." : JSON.stringify(err));
-            }
-        } finally {
-            setLoading(false);
-        }
+        });
     };
+
+    if (submitted) {
+        return (
+            <div className="text-center py-20 space-y-4">
+                <div className="w-16 h-16 bg-emerald-500/10 rounded-full flex items-center justify-center mx-auto">
+                    <Sparkles className="w-8 h-8 text-emerald-400" />
+                </div>
+                <h2 className="text-2xl font-heading font-medium text-foreground">¡Propiedad Enviada!</h2>
+                <p className="text-muted-foreground max-w-md mx-auto">
+                    Tu propiedad fue enviada para revisión. Nuestro equipo la aprobará en las próximas horas.
+                </p>
+                <button
+                    onClick={() => router.push('/propiedades')}
+                    className="mt-4 px-6 py-3 bg-brand text-white rounded-xl font-medium hover:opacity-90 transition-opacity"
+                >
+                    Ver Propiedades
+                </button>
+            </div>
+        );
+    }
 
     return (
         <form onSubmit={handleSubmit} className="space-y-6">
+            {/* Error */}
             {errorMsg && (
-                <div className="bg-red-50 text-red-600 p-4 rounded-xl text-sm mb-6 border border-red-100">
-                    {errorMsg}
+                <div className="flex items-center gap-3 bg-red-500/10 border border-red-500/20 text-red-400 rounded-xl p-4">
+                    <AlertCircle className="w-5 h-5 flex-shrink-0" />
+                    <p className="text-sm">{errorMsg}</p>
+                    <button type="button" onClick={() => setErrorMsg("")} className="ml-auto">
+                        <X className="w-4 h-4" />
+                    </button>
                 </div>
             )}
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="md:col-span-2">
-                    <label className="text-sm font-medium text-muted-foreground mb-1 block">Título de la Propiedad *</label>
-                    <input required name="title" value={formData.title} onChange={handleChange} type="text" className="w-full bg-background border border-border rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-brand outline-none" placeholder="Hermosa casa en Yerba Buena" />
-                </div>
-
-                <div className="md:col-span-2">
-                    <label className="text-sm font-medium text-muted-foreground mb-1 block">Descripción detallada</label>
-                    <textarea name="description" value={formData.description} onChange={handleChange} rows={5} className="w-full bg-background border border-border rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-brand outline-none resize-y" placeholder="Características adicionales, estado general..." />
-                </div>
-
+            {/* 1. Información Principal */}
+            <FormSection icon={<Building2 className="w-5 h-5" />} title="Información Principal">
                 <div>
-                    <label className="text-sm font-medium text-muted-foreground mb-1 block">Tipo de Propiedad *</label>
-                    <select required name="property_type" value={formData.property_type} onChange={handleChange} className="w-full bg-background border border-border rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-brand outline-none cursor-pointer">
-                        <option value="Casa">Casa</option>
-                        <option value="Departamento">Departamento</option>
-                        <option value="Duplex">Duplex</option>
-                        <option value="Terreno">Terreno</option>
-                        <option value="Local">Local</option>
-                        <option value="Oficina">Oficina</option>
-                    </select>
+                    <FieldLabel required>Título</FieldLabel>
+                    <input name="title" value={formData.title} onChange={handleChange} required
+                        placeholder="Ej: Hermosa casa con pileta en Yerba Buena"
+                        className={inputCls} />
                 </div>
 
-                <div>
-                    <label className="text-sm font-medium text-muted-foreground mb-1 block">Ubicación *</label>
-                    <input required name="location" value={formData.location} onChange={handleChange} type="text" className="w-full bg-background border border-border rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-brand outline-none" placeholder="Yerba Buena, Tucumán" />
-                </div>
-
-                <div>
-                    <label className="text-sm font-medium text-muted-foreground mb-1 block">Cotización *</label>
-                    <div className="flex rounded-xl overflow-hidden border border-border focus-within:ring-2 focus-within:ring-brand">
-                        <select name="currency" value={formData.currency} onChange={handleChange} className="bg-muted px-4 py-3 text-sm border-r border-border outline-none font-medium cursor-pointer">
-                            <option value="USD">USD</option>
-                            <option value="ARS">ARS</option>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div>
+                        <FieldLabel required>Tipo de Propiedad</FieldLabel>
+                        <select name="property_type" value={formData.property_type} onChange={handleChange} className={selectCls}>
+                            {PROPERTY_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
                         </select>
-                        <input required name="price" value={formData.price} onChange={handleChange} type="number" min={0} step={100} className="w-full bg-background px-4 py-3 text-sm outline-none" placeholder="150000" />
+                    </div>
+                    <div>
+                        <FieldLabel required>Operación</FieldLabel>
+                        <select name="operation_type" value={formData.operation_type} onChange={handleChange} className={selectCls}>
+                            {OPERATIONS.map(t => <option key={t} value={t}>{OPERATION_LABELS[t]}</option>)}
+                        </select>
+                    </div>
+                    <div>
+                        <FieldLabel>Estado</FieldLabel>
+                        <select name="condition" value={formData.condition} onChange={handleChange} className={selectCls}>
+                            {CONDITIONS.map(c => <option key={c} value={c}>{CONDITION_LABELS[c]}</option>)}
+                        </select>
                     </div>
                 </div>
 
                 <div>
-                    <label className="text-sm font-medium text-muted-foreground mb-1 block">Imágenes (URLs separadas por comas)</label>
-                    <input name="imagesStr" value={formData.imagesStr} onChange={handleChange} type="text" className="w-full bg-background border border-border rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-brand outline-none" placeholder="https://ejemplo.com/foto1.jpg, https://..." />
+                    <FieldLabel required>Descripción</FieldLabel>
+                    <textarea name="description" value={formData.description} onChange={handleChange} required rows={4}
+                        placeholder="Describí la propiedad en detalle: materiales, luminosidad, vistas, entorno…"
+                        className={`${inputCls} resize-none`} />
+                </div>
+            </FormSection>
+
+            {/* 2. Precio */}
+            <FormSection icon={<DollarSign className="w-5 h-5" />} title="Precio">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div>
+                        <FieldLabel required>Precio</FieldLabel>
+                        <input name="price" type="number" value={formData.price} onChange={handleChange} required
+                            placeholder="150000" className={inputCls} />
+                    </div>
+                    <div>
+                        <FieldLabel>Moneda</FieldLabel>
+                        <select name="currency" value={formData.currency} onChange={handleChange} className={selectCls}>
+                            <option value="USD">USD — Dólares</option>
+                            <option value="ARS">ARS — Pesos</option>
+                        </select>
+                    </div>
+                    <div>
+                        <FieldLabel>Expensas (ARS/mes)</FieldLabel>
+                        <input name="expenses" type="number" value={formData.expenses} onChange={handleChange}
+                            placeholder="0" className={inputCls} />
+                    </div>
+                </div>
+            </FormSection>
+
+            {/* 3. Ubicación */}
+            <FormSection icon={<MapPin className="w-5 h-5" />} title="Ubicación">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <FieldLabel required>Zona / Localidad</FieldLabel>
+                        <input name="location" value={formData.location} onChange={handleChange} required
+                            placeholder="Yerba Buena, Tucumán" className={inputCls} />
+                    </div>
+                    <div>
+                        <FieldLabel>Dirección</FieldLabel>
+                        <input name="address" value={formData.address} onChange={handleChange}
+                            placeholder="Av. Aconquija 1200" className={inputCls} />
+                    </div>
+                    <div>
+                        <FieldLabel>Barrio / Country</FieldLabel>
+                        <input name="neighborhood" value={formData.neighborhood} onChange={handleChange}
+                            placeholder="Country Los Cerros" className={inputCls} />
+                    </div>
+                    <div>
+                        <FieldLabel>Ciudad</FieldLabel>
+                        <input name="city" value={formData.city} onChange={handleChange} className={inputCls} />
+                    </div>
                 </div>
 
-                <div className="grid grid-cols-3 gap-4 md:col-span-2">
+                <div className="grid grid-cols-2 gap-4 pt-2">
                     <div>
-                        <label className="text-sm font-medium text-muted-foreground mb-1 block">Dormitorios</label>
-                        <input name="bedrooms" value={formData.bedrooms} onChange={handleChange} type="number" min={0} className="w-full bg-background border border-border rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-brand outline-none" placeholder="3" />
+                        <FieldLabel>Latitud <span className="text-xs text-muted-foreground/60">(opcional – para el mapa)</span></FieldLabel>
+                        <input name="latitude" type="number" step="any" value={formData.latitude} onChange={handleChange}
+                            placeholder="-26.8241" className={inputCls} />
                     </div>
                     <div>
-                        <label className="text-sm font-medium text-muted-foreground mb-1 block">Baños</label>
-                        <input name="bathrooms" value={formData.bathrooms} onChange={handleChange} type="number" min={0} step={0.5} className="w-full bg-background border border-border rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-brand outline-none" placeholder="2" />
-                    </div>
-                    <div>
-                        <label className="text-sm font-medium text-muted-foreground mb-1 block">Superficie (m²)</label>
-                        <input name="square_meters" value={formData.square_meters} onChange={handleChange} type="number" min={0} step={0.1} className="w-full bg-background border border-border rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-brand outline-none" placeholder="350" />
+                        <FieldLabel>Longitud</FieldLabel>
+                        <input name="longitude" type="number" step="any" value={formData.longitude} onChange={handleChange}
+                            placeholder="-65.2226" className={inputCls} />
                     </div>
                 </div>
-            </div>
+            </FormSection>
 
-            <div className="pt-6 border-t border-border mt-8 flex justify-end gap-4">
-                <button type="button" onClick={() => router.back()} disabled={loading} className="px-6 py-3 rounded-full font-medium hover:bg-muted transition-colors text-foreground">
-                    Cancelar
-                </button>
-                <button type="submit" disabled={loading} className="px-8 py-3 bg-brand text-white rounded-full font-medium hover:bg-gold hover:text-black transition-colors flex items-center gap-2">
-                    {loading ? (
-                        <>
-                            <Loader2 className="w-4 h-4 animate-spin" />
-                            <span>{initialData ? 'Guardando...' : 'Publicando...'}</span>
-                        </>
-                    ) : (
-                        <span>{initialData ? 'Guardar Cambios' : 'Publicar ahora'}</span>
-                    )}
-                </button>
-            </div>
+            {/* 4. Características */}
+            <FormSection icon={<Square className="w-5 h-5" />} title="Características">
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                    {[
+                        { name: "bedrooms", icon: <Bed className="w-3.5 h-3.5" />, label: "Dormitorios", placeholder: "0" },
+                        { name: "bathrooms", icon: <Bath className="w-3.5 h-3.5" />, label: "Baños", placeholder: "0" },
+                        { name: "square_meters", icon: <Square className="w-3.5 h-3.5" />, label: "m² Cubiertos", placeholder: "0" },
+                        { name: "lot_meters", icon: <Ruler className="w-3.5 h-3.5" />, label: "m² Terreno", placeholder: "0" },
+                        { name: "garage", icon: <Car className="w-3.5 h-3.5" />, label: "Cocheras", placeholder: "0" },
+                        { name: "year_built", icon: <Calendar className="w-3.5 h-3.5" />, label: "Año Construcción", placeholder: "2024" },
+                    ].map(field => (
+                        <div key={field.name}>
+                            <FieldLabel>
+                                <span className="flex items-center gap-1">{field.icon} {field.label}</span>
+                            </FieldLabel>
+                            <input name={field.name}
+                                value={(formData as any)[field.name]}
+                                onChange={handleChange}
+                                type="number" placeholder={field.placeholder}
+                                className={inputCls} />
+                        </div>
+                    ))}
+                </div>
+            </FormSection>
+
+            {/* 5. Amenidades */}
+            <FormSection icon={<Tag className="w-5 h-5" />} title="Amenidades">
+                <div className="flex flex-wrap gap-2">
+                    {AMENITY_OPTIONS.map(a => (
+                        <button key={a} type="button" onClick={() => toggleAmenity(a)}
+                            className={`px-4 py-1.5 rounded-xl text-sm font-medium transition-all border ${selectedAmenities.includes(a)
+                                ? 'bg-brand/10 text-brand border-brand/30'
+                                : 'bg-muted/50 text-muted-foreground border-border hover:text-foreground hover:border-border/80'
+                                }`}
+                        >
+                            {a.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}
+                        </button>
+                    ))}
+                </div>
+                {selectedAmenities.length > 0 && (
+                    <p className="text-xs text-muted-foreground mt-1">{selectedAmenities.length} seleccionada{selectedAmenities.length !== 1 ? 's' : ''}</p>
+                )}
+            </FormSection>
+
+            {/* 6. Imágenes */}
+            <FormSection icon={<ImageIcon className="w-5 h-5" />} title="Imágenes">
+                <div>
+                    <FieldLabel>URLs de imágenes <span className="text-xs text-muted-foreground/60">(una por línea o separadas por coma)</span></FieldLabel>
+                    <textarea name="imagesStr"
+                        value={formData.imagesStr}
+                        onChange={handleChange as any}
+                        rows={3}
+                        placeholder={"https://ejemplo.com/foto1.jpg\nhttps://ejemplo.com/foto2.jpg"}
+                        className={`${inputCls} resize-y font-mono text-xs`}
+                    />
+                </div>
+
+                {/* Live image preview strip */}
+                {previewImages.length > 0 && (
+                    <div className="flex gap-3 flex-wrap mt-2">
+                        {previewImages.map((url, i) => (
+                            <div key={i} className="relative w-24 h-16 rounded-xl overflow-hidden border border-border">
+                                <Image src={url} alt={`Preview ${i + 1}`} fill className="object-cover" />
+                                <div className="absolute bottom-0 left-0 right-0 text-[9px] text-white text-center bg-black/50 py-0.5">
+                                    #{i + 1}
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                )}
+            </FormSection>
+
+            {/* Submit */}
+            <button
+                type="submit"
+                disabled={isPending}
+                className="w-full py-4 bg-gradient-to-r from-brand to-blue-600 text-white text-base font-semibold rounded-2xl hover:opacity-90 transition-opacity disabled:opacity-50 flex items-center justify-center gap-2"
+            >
+                {isPending ? (
+                    <><Loader2 className="w-5 h-5 animate-spin" /> Guardando...</>
+                ) : (
+                    <><Upload className="w-5 h-5" />{initialData ? 'Guardar Cambios' : 'Enviar para Revisión'}</>
+                )}
+            </button>
         </form>
     );
 }

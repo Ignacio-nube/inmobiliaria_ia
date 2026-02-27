@@ -11,7 +11,7 @@ interface LogoProps {
 export function Logo({ className, isDarkTheme }: LogoProps) {
     return (
         <motion.div
-            className={cn("flex items-center gap-3 cursor-pointer", className)}
+            className={cn("group flex items-center gap-3 cursor-pointer", className)}
             initial="initial"
             whileHover="hover"
         >
@@ -49,21 +49,19 @@ export function Logo({ className, isDarkTheme }: LogoProps) {
                 </motion.svg>
             </motion.div>
             <div className="flex flex-col">
-                <motion.span
+                <span
                     className={cn(
-                        "font-heading text-2xl font-bold leading-none tracking-tight transition-colors",
-                        isDarkTheme ? "text-white" : "text-foreground"
+                        "font-heading text-2xl font-bold leading-none tracking-tight transition-colors group-hover:text-brand",
+                        // Always use white when on a dark/transparent hero background
+                        // Otherwise: dark navy in light mode, white in dark mode
+                        isDarkTheme ? "text-white" : "text-slate-900 dark:text-slate-100"
                     )}
-                    variants={{
-                        initial: { color: isDarkTheme ? "#ffffff" : "var(--color-foreground)" },
-                        hover: { color: "var(--color-brand)" }
-                    }}
                 >
                     Ignacio
-                </motion.span>
+                </span>
                 <span className={cn(
                     "font-brand text-[9px] font-medium uppercase tracking-[0.25em] mt-0.5 transition-colors",
-                    isDarkTheme ? "text-white/80" : "text-muted-foreground"
+                    isDarkTheme ? "text-white/80" : "text-slate-500 dark:text-slate-400"
                 )}>
                     Propiedades
                 </span>

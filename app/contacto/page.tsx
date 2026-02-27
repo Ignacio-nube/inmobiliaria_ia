@@ -17,7 +17,7 @@ export default function ContactoPage() {
     return (
         <div className="min-h-screen bg-background pb-24">
             {/* Minimalist Hero */}
-            <div className="relative h-[400px] w-full bg-foreground flex items-center justify-center overflow-hidden">
+            <div className="relative h-[400px] w-full bg-[#0b1426] flex items-center justify-center overflow-hidden">
                 <div className="absolute inset-0">
                     <Image
                         src="https://images.unsplash.com/photo-1577412647305-991150c7d163?q=80&w=2070&auto=format&fit=crop"

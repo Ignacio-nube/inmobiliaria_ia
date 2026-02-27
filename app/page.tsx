@@ -12,7 +12,8 @@ export default async function HomePage() {
     .select('*')
     .eq('published', true)
     .eq('is_featured', true)
-    .limit(3);
+    .limit(9);
+
 
   if (propertiesError) {
     console.error("Error fetching properties:", propertiesError);
@@ -32,7 +33,13 @@ export default async function HomePage() {
   const heroTitle = settings?.hero_title || "Encontrá tu lugar en el mundo";
   const heroSubtitle = settings?.hero_subtitle || "La primera inmobiliaria en Tucumán potenciada por Inteligencia Artificial. Escribí lo que buscás, nosotros encontramos tu hogar ideal.";
   const cardStyle = settings?.property_card_style || "modern";
-  const heroImgUrl = settings?.hero_image_url || "https://images.unsplash.com/photo-1600596542815-ffad4c1539a9?q=80&w=2075&auto=format&fit=crop";
+
+  // Parse hero images: support newline-separated and comma-separated URLs
+  const rawHeroUrls = settings?.hero_image_url || "https://images.unsplash.com/photo-1600596542815-ffad4c1539a9?q=80&w=2075&auto=format&fit=crop";
+  const heroImages = rawHeroUrls
+    .split(/[\n,]/)
+    .map((url: string) => url.trim())
+    .filter((url: string) => url.length > 0);
 
   return (
     <HomeContent
@@ -40,7 +47,7 @@ export default async function HomePage() {
       heroTitle={heroTitle}
       heroSubtitle={heroSubtitle}
       cardStyle={cardStyle}
-      heroImgUrl={heroImgUrl}
+      heroImages={heroImages}
     />
   );
 }

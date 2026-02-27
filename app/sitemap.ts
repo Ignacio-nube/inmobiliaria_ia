@@ -1,7 +1,10 @@
 import { MetadataRoute } from 'next';
 import { createClient } from '@/lib/supabase/server';
 
+export const dynamic = 'force-dynamic';
+
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
+
     const baseUrl = 'https://ignacio.cloud'; // In a real app this would use an ENV var
 
     // Static routes

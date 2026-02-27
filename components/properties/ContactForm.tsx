@@ -52,13 +52,13 @@ export function ContactForm({ propertyId, propertyTitle }: ContactFormProps) {
 
     if (success) {
         return (
-            <div className="bg-green-50 border border-green-200 text-green-800 rounded-xl p-6 text-center space-y-3">
+            <div className="bg-green-100/50 dark:bg-green-500/10 border border-green-200 dark:border-green-500/20 text-green-800 dark:text-green-500 rounded-xl p-6 text-center space-y-3">
                 <CheckCircle2 className="w-10 h-10 text-green-500 mx-auto" />
                 <h4 className="font-semibold text-lg">¡Mensaje Enviado!</h4>
-                <p className="text-sm">La inmobiliaria se pondrá en contacto a la brevedad.</p>
+                <p className="text-sm text-green-700 dark:text-green-400">La inmobiliaria se pondrá en contacto a la brevedad.</p>
                 <button
                     onClick={() => setSuccess(false)}
-                    className="text-sm font-medium text-green-700 underline mt-2"
+                    className="text-sm font-medium underline mt-2 hover:opacity-80 transition-opacity"
                 >
                     Enviar otro mensaje
                 </button>
@@ -67,9 +67,9 @@ export function ContactForm({ propertyId, propertyTitle }: ContactFormProps) {
     }
 
     return (
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form id="tour-contact-form" onSubmit={handleSubmit} className="space-y-4">
             {errorMsg && (
-                <div className="bg-red-50 text-red-600 p-3 rounded-lg text-sm border border-red-100">
+                <div className="bg-destructive/10 text-destructive p-3 rounded-lg text-sm border border-destructive/20">
                     {errorMsg}
                 </div>
             )}

@@ -15,6 +15,7 @@ export default async function PropertiesPage() {
         .from('properties')
         .select('*')
         .eq('published', true)
+        .eq('approval_status', 'approved')
         .order('created_at', { ascending: false });
 
     if (propertiesError) {

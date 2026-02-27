@@ -1,11 +1,24 @@
 "use client";
 
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useCallback } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { PropertyCard } from '@/components/ui/PropertyCard';
 import { Database } from '@/lib/database.types';
-import { Search, SlidersHorizontal, MapPin, Building2, Wallet } from 'lucide-react';
-import { motion } from 'framer-motion';
+import {
+    Search, SlidersHorizontal, Sparkles, X, ChevronDown, ChevronUp,
+    Building2, Wallet, Bed, Bath, Car, MapPin, Ruler, Tag, Loader2
+} from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { useTypingPlaceholder } from '@/hooks/useTypingPlaceholder';
+
+// Typing placeholders for AI Search
+const SEARCH_PLACEHOLDERS = [
+    "Casa con pileta cerca del cerro...",
+    "Departamento en el Centro...",
+    "Terreno en Yerba Buena...",
+    "Local comercial en Yerba Buena...",
+    "Casa 3 dormitorios en Barrio Sur..."
+];
 
 type Property = Database['public']['Tables']['properties']['Row'];
 
@@ -14,171 +27,510 @@ interface PropertiesClientProps {
     cardStyle: string;
 }
 
+// Primary filter chips data
+const OPERATION_OPTIONS = [
+    { value: 'all', label: 'Todas' },
+    { value: 'venta', label: 'Venta' },
+    { value: 'alquiler', label: 'Alquiler' },
+    { value: 'alquiler_temporal', label: 'Temporal' },
+];
+const TYPE_OPTIONS = [
+    { value: 'all', label: 'Tipo' },
+    { value: 'Casa', label: 'Casa' },
+    { value: 'Departamento', label: 'Depto' },
+    { value: 'Terreno', label: 'Terreno' },
+    { value: 'Local', label: 'Local' },
+    { value: 'Oficina', label: 'Oficina' },
+    { value: 'Duplex', label: 'Duplex' },
+];
+const PRICE_OPTIONS = [
+    { value: 'all', label: 'Precio' },
+    { value: 'under50k', label: '< USD 50k' },
+    { value: '50k-100k', label: '50k - 100k' },
+    { value: '100k-250k', label: '100k - 250k' },
+    { value: 'over250k', label: '> USD 250k' },
+];
+const BEDROOMS_OPTIONS = [
+    { value: 'any', label: 'Dorm.' },
+    { value: '1', label: '1+' },
+    { value: '2', label: '2+' },
+    { value: '3', label: '3+' },
+    { value: '4', label: '4+' },
+];
+
 export function PropertiesClient({ initialProperties, cardStyle }: PropertiesClientProps) {
     const searchParams = useSearchParams();
 
-    const [searchTerm, setSearchTerm] = useState(searchParams.get('q') || '');
+    // Primary filters
+    const [operationType, setOperationType] = useState(searchParams.get('op') || 'all');
     const [propertyType, setPropertyType] = useState(searchParams.get('type') || 'all');
-    const [minBedrooms, setMinBedrooms] = useState(searchParams.get('beds') || 'any');
     const [priceRange, setPriceRange] = useState(searchParams.get('price') || 'all');
+    const [minBedrooms, setMinBedrooms] = useState(searchParams.get('beds') || 'any');
 
-    // Re-sync if URL changes (like when using back/forward buttons)
-    useEffect(() => {
-        setSearchTerm(searchParams.get('q') || '');
-        setPropertyType(searchParams.get('type') || 'all');
-        setMinBedrooms(searchParams.get('beds') || 'any');
-        setPriceRange(searchParams.get('price') || 'all');
-    }, [searchParams]);
+    // Advanced filters
+    const [showAdvanced, setShowAdvanced] = useState(false);
+    const [neighborhood, setNeighborhood] = useState('');
+    const [minBathrooms, setMinBathrooms] = useState('any');
+    const [minGarage, setMinGarage] = useState('any');
+    const [minArea, setMinArea] = useState('');
+    const [maxArea, setMaxArea] = useState('');
+    const [condition, setCondition] = useState('all');
+    const [selectedAmenities, setSelectedAmenities] = useState<string[]>([]);
 
-    // Filter properties based on state
+    // AI Search
+    const [aiQuery, setAiQuery] = useState('');
+    const [aiSearchTerm, setAiSearchTerm] = useState('');
+    const [isAiSearching, setIsAiSearching] = useState(false);
+
+    // Typing Placeholder Hook
+    const { placeholder, visible: placeholderVisible } = useTypingPlaceholder(SEARCH_PLACEHOLDERS, 3000);
+
+    // Gather unique neighborhoods
+    const neighborhoods = useMemo(() => {
+        const set = new Set<string>();
+        initialProperties.forEach(p => { if (p.neighborhood) set.add(p.neighborhood); });
+        return Array.from(set).sort();
+    }, [initialProperties]);
+
+    // Gather unique amenities
+    const allAmenities = useMemo(() => {
+        const set = new Set<string>();
+        initialProperties.forEach(p => { p.amenities?.forEach(a => set.add(a)); });
+        return Array.from(set).sort();
+    }, [initialProperties]);
+
+    // Count active filters
+    const activeFilterCount = useMemo(() => {
+        let count = 0;
+        if (operationType !== 'all') count++;
+        if (propertyType !== 'all') count++;
+        if (priceRange !== 'all') count++;
+        if (minBedrooms !== 'any') count++;
+        if (neighborhood) count++;
+        if (minBathrooms !== 'any') count++;
+        if (minGarage !== 'any') count++;
+        if (minArea) count++;
+        if (maxArea) count++;
+        if (condition !== 'all') count++;
+        if (selectedAmenities.length > 0) count++;
+        if (aiSearchTerm) count++;
+        return count;
+    }, [operationType, propertyType, priceRange, minBedrooms, neighborhood, minBathrooms, minGarage, minArea, maxArea, condition, selectedAmenities, aiSearchTerm]);
+
+    // AI Search handler
+    const handleAiSearch = useCallback(async () => {
+        if (!aiQuery.trim()) return;
+        setIsAiSearching(true);
+
+        try {
+            const res = await fetch('/api/ai-search', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ query: aiQuery }),
+            });
+            const data = await res.json();
+
+            // Apply AI-parsed filters
+            if (data.searchTerm) setAiSearchTerm(data.searchTerm);
+            if (data.propertyType && data.propertyType !== 'all') setPropertyType(data.propertyType);
+            if (data.minBedrooms && data.minBedrooms !== 'any') setMinBedrooms(data.minBedrooms);
+            if (data.priceRange && data.priceRange !== 'all') setPriceRange(data.priceRange);
+            if (data.operationType && data.operationType !== 'all') setOperationType(data.operationType);
+            if (data.neighborhood) setNeighborhood(data.neighborhood);
+
+            // Log search
+            logSearch(aiQuery, data);
+        } catch {
+            // Fallback: just use the text as search term
+            setAiSearchTerm(aiQuery);
+        } finally {
+            setIsAiSearching(false);
+        }
+    }, [aiQuery]);
+
+    const logSearch = async (query: string, filters: any) => {
+        try {
+            // TODO: implement when search_logs insert is ready via API
+        } catch { }
+    };
+
+    const handleKeyDown = (e: React.KeyboardEvent) => {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            handleAiSearch();
+        }
+    };
+
+    // Clear all
+    const clearAll = () => {
+        setOperationType('all');
+        setPropertyType('all');
+        setPriceRange('all');
+        setMinBedrooms('any');
+        setNeighborhood('');
+        setMinBathrooms('any');
+        setMinGarage('any');
+        setMinArea('');
+        setMaxArea('');
+        setCondition('all');
+        setSelectedAmenities([]);
+        setAiQuery('');
+        setAiSearchTerm('');
+    };
+
+    // Filter properties
     const filteredProperties = useMemo(() => {
         return initialProperties.filter(property => {
-            const matchSearch = searchTerm === '' ||
-                property.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                property.location.toLowerCase().includes(searchTerm.toLowerCase());
-
-            const matchType = propertyType === 'all' || property.property_type === propertyType;
-
-            const matchBedrooms = minBedrooms === 'any' ||
-                (property.bedrooms !== null && property.bedrooms >= parseInt(minBedrooms));
-
-            let matchPrice = true;
-            if (priceRange !== 'all') {
-                const p = property.price;
-                if (priceRange === 'under100k') matchPrice = p < 100000;
-                else if (priceRange === '100k-250k') matchPrice = p >= 100000 && p <= 250000;
-                else if (priceRange === 'over250k') matchPrice = p > 250000;
+            // Text search
+            if (aiSearchTerm) {
+                const term = aiSearchTerm.toLowerCase();
+                const searchable = [
+                    property.title, property.location, property.description,
+                    property.neighborhood, property.address, property.city,
+                    ...(property.amenities || [])
+                ].filter(Boolean).join(' ').toLowerCase();
+                if (!searchable.includes(term)) return false;
             }
 
-            return matchSearch && matchType && matchBedrooms && matchPrice;
+            // Operation
+            if (operationType !== 'all' && property.operation_type !== operationType) return false;
+
+            // Type
+            if (propertyType !== 'all' && property.property_type !== propertyType) return false;
+
+            // Price
+            if (priceRange !== 'all') {
+                const p = property.price;
+                if (priceRange === 'under50k' && p >= 50000) return false;
+                if (priceRange === '50k-100k' && (p < 50000 || p > 100000)) return false;
+                if (priceRange === '100k-250k' && (p < 100000 || p > 250000)) return false;
+                if (priceRange === 'over250k' && p <= 250000) return false;
+            }
+
+            // Bedrooms
+            if (minBedrooms !== 'any' && (property.bedrooms === null || property.bedrooms < parseInt(minBedrooms))) return false;
+
+            // Neighborhood
+            if (neighborhood && property.neighborhood !== neighborhood) return false;
+
+            // Bathrooms
+            if (minBathrooms !== 'any' && (property.bathrooms === null || property.bathrooms < parseInt(minBathrooms))) return false;
+
+            // Garage
+            if (minGarage !== 'any' && (property.garage === null || property.garage < parseInt(minGarage))) return false;
+
+            // Area
+            if (minArea && (property.square_meters === null || property.square_meters < parseInt(minArea))) return false;
+            if (maxArea && (property.square_meters === null || property.square_meters > parseInt(maxArea))) return false;
+
+            // Condition
+            if (condition !== 'all' && property.condition !== condition) return false;
+
+            // Amenities
+            if (selectedAmenities.length > 0) {
+                const propAmenities = property.amenities || [];
+                if (!selectedAmenities.every(a => propAmenities.includes(a))) return false;
+            }
+
+            return true;
         });
-    }, [initialProperties, searchTerm, propertyType, minBedrooms, priceRange]);
+    }, [initialProperties, aiSearchTerm, operationType, propertyType, priceRange, minBedrooms, neighborhood, minBathrooms, minGarage, minArea, maxArea, condition, selectedAmenities]);
+
+    const toggleAmenity = (amenity: string) => {
+        setSelectedAmenities(prev =>
+            prev.includes(amenity) ? prev.filter(a => a !== amenity) : [...prev, amenity]
+        );
+    };
 
     return (
-        <div className="flex flex-col lg:flex-row gap-8">
-            {/* Sidebar Filters */}
-            <aside className="w-full lg:w-1/4 flex-shrink-0">
-                <div className="bg-card border border-border rounded-3xl p-6 sticky top-28 shadow-sm">
-                    <div className="flex items-center gap-2 mb-6 text-foreground font-semibold text-lg pb-4 border-b border-border">
-                        <SlidersHorizontal className="w-5 h-5" />
-                        Filtros
-                    </div>
+        <div className="relative pb-28">
+            {/* Header Bar */}
+            <div className="flex flex-col gap-4 mb-6">
+                {/* Primary Filter Chips */}
+                <div className="flex flex-wrap gap-2 items-center">
+                    <FilterChipGroup value={operationType} onChange={setOperationType} options={OPERATION_OPTIONS} icon={<Tag className="w-3.5 h-3.5" />} />
+                    <span className="w-px h-6 bg-border hidden sm:block" />
+                    <FilterChipGroup value={propertyType} onChange={setPropertyType} options={TYPE_OPTIONS} icon={<Building2 className="w-3.5 h-3.5" />} />
+                    <span className="w-px h-6 bg-border hidden sm:block" />
+                    <FilterChipGroup value={priceRange} onChange={setPriceRange} options={PRICE_OPTIONS} icon={<Wallet className="w-3.5 h-3.5" />} />
+                    <span className="w-px h-6 bg-border hidden sm:block" />
+                    <FilterChipGroup value={minBedrooms} onChange={setMinBedrooms} options={BEDROOMS_OPTIONS} icon={<Bed className="w-3.5 h-3.5" />} />
+                </div>
 
-                    <div className="space-y-6">
-                        {/* Search Input */}
-                        <div>
-                            <label className="text-sm font-medium text-muted-foreground mb-2 block flexitems-center gap-2">
-                                <Search className="w-4 h-4 inline-block mr-1" /> Buscar
-                            </label>
-                            <input
-                                type="text"
-                                placeholder="Ej: Yerba Buena, Pileta..."
-                                className="w-full bg-background border border-border rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-brand outline-none transition-all"
-                                value={searchTerm}
-                                onChange={(e) => setSearchTerm(e.target.value)}
-                            />
-                        </div>
+                {/* Secondary controls row */}
+                <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                        <button
+                            onClick={() => setShowAdvanced(!showAdvanced)}
+                            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium transition-all ${showAdvanced ? 'bg-brand/10 text-brand' : 'text-muted-foreground hover:text-foreground hover:bg-muted'
+                                }`}
+                        >
+                            <SlidersHorizontal className="w-4 h-4" />
+                            Más filtros
+                            {showAdvanced ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+                        </button>
 
-                        {/* Property Type */}
-                        <div>
-                            <label className="text-sm font-medium text-muted-foreground mb-2 block flexitems-center gap-2">
-                                <Building2 className="w-4 h-4 inline-block mr-1" /> Tipo de Propiedad
-                            </label>
-                            <select
-                                className="w-full bg-background border border-border rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-brand outline-none transition-all cursor-pointer"
-                                value={propertyType}
-                                onChange={(e) => setPropertyType(e.target.value)}
-                            >
-                                <option value="all">Todas</option>
-                                <option value="Casa">Casa</option>
-                                <option value="Departamento">Departamento</option>
-                                <option value="Terreno">Terreno</option>
-                                <option value="Local">Local</option>
-                                <option value="Oficina">Oficina</option>
-                            </select>
-                        </div>
-
-                        {/* Price Range */}
-                        <div>
-                            <label className="text-sm font-medium text-muted-foreground mb-2 block flexitems-center gap-2">
-                                <Wallet className="w-4 h-4 inline-block mr-1" /> Rango de Precio
-                            </label>
-                            <select
-                                className="w-full bg-background border border-border rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-brand outline-none transition-all cursor-pointer"
-                                value={priceRange}
-                                onChange={(e) => setPriceRange(e.target.value)}
-                            >
-                                <option value="all">Cualquiera</option>
-                                <option value="under100k">Menos de $100.000</option>
-                                <option value="100k-250k">$100.000 a $250.000</option>
-                                <option value="over250k">Más de $250.000</option>
-                            </select>
-                        </div>
-
-                        {/* Bedrooms */}
-                        <div>
-                            <label className="text-sm font-medium text-muted-foreground mb-2 block">Habitaciones mínimas</label>
-                            <div className="flex gap-2">
-                                {['any', '1', '2', '3', '4'].map(num => (
-                                    <button
-                                        key={num}
-                                        onClick={() => setMinBedrooms(num)}
-                                        className={`flex-1 py-2 rounded-lg border text-sm font-medium transition-all ${minBedrooms === num ? 'bg-brand text-white border-brand' : 'bg-background border-border text-foreground hover:bg-muted'
-                                            }`}
-                                    >
-                                        {num === 'any' ? 'Cualquiera' : `${num}+`}
-                                    </button>
-                                ))}
-                            </div>
-                        </div>
-
-                        {(searchTerm || propertyType !== 'all' || minBedrooms !== 'any' || priceRange !== 'all') && (
+                        {activeFilterCount > 0 && (
                             <button
-                                onClick={() => {
-                                    setSearchTerm('');
-                                    setPropertyType('all');
-                                    setMinBedrooms('any');
-                                    setPriceRange('all');
-                                }}
-                                className="w-full py-3 text-sm text-brand font-medium hover:bg-brand/5 rounded-xl transition-colors"
+                                onClick={clearAll}
+                                className="flex items-center gap-1 px-3 py-2 rounded-xl text-sm font-medium text-red-400 hover:bg-red-500/10 transition-colors"
                             >
-                                Limpiar Filtros
+                                <X className="w-3.5 h-3.5" />
+                                Limpiar ({activeFilterCount})
                             </button>
                         )}
-
                     </div>
-                </div>
-            </aside>
 
-            {/* Property Grid */}
-            <main className="flex-1">
-                <div className="mb-6 flex justify-between items-center bg-card border border-border rounded-xl px-4 py-3">
-                    <p className="font-medium text-muted-foreground">
-                        Buscando <span className="text-foreground font-bold">{filteredProperties.length}</span> propiedades
+                    <p className="text-sm text-muted-foreground">
+                        <span className="font-bold text-foreground">{filteredProperties.length}</span> propiedades
                     </p>
                 </div>
+            </div>
 
-                {filteredProperties.length > 0 ? (
-                    <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-                        {filteredProperties.map((property, index) => (
-                            <PropertyCard
-                                key={property.id}
-                                property={property}
-                                cardStyle={cardStyle}
-                                index={index}
-                            />
-                        ))}
-                    </div>
-                ) : (
-                    <div className="flex flex-col items-center justify-center py-20 bg-muted/30 rounded-3xl border border-dashed border-border text-center">
-                        <div className="w-16 h-16 bg-background rounded-full flex items-center justify-center shadow-sm mb-4">
-                            <Search className="w-8 h-8 text-muted-foreground p-1" />
+            {/* Advanced Filters Panel */}
+            <AnimatePresence>
+                {showAdvanced && (
+                    <motion.div
+                        initial={{ height: 0, opacity: 0 }}
+                        animate={{ height: "auto", opacity: 1 }}
+                        exit={{ height: 0, opacity: 0 }}
+                        transition={{ duration: 0.2 }}
+                        className="overflow-hidden mb-6"
+                    >
+                        <div className="bg-card border border-border rounded-2xl p-6 grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
+                            {/* Neighborhood */}
+                            <div>
+                                <label className="text-xs font-medium text-muted-foreground mb-1.5 flex items-center gap-1">
+                                    <MapPin className="w-3 h-3" /> Barrio
+                                </label>
+                                <select
+                                    value={neighborhood}
+                                    onChange={e => setNeighborhood(e.target.value)}
+                                    className="w-full bg-background border border-border rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-brand outline-none"
+                                >
+                                    <option value="">Todos</option>
+                                    {neighborhoods.map(n => <option key={n} value={n}>{n}</option>)}
+                                </select>
+                            </div>
+
+                            {/* Bathrooms */}
+                            <div>
+                                <label className="text-xs font-medium text-muted-foreground mb-1.5 flex items-center gap-1">
+                                    <Bath className="w-3 h-3" /> Baños mín.
+                                </label>
+                                <select
+                                    value={minBathrooms}
+                                    onChange={e => setMinBathrooms(e.target.value)}
+                                    className="w-full bg-background border border-border rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-brand outline-none"
+                                >
+                                    <option value="any">Cualquiera</option>
+                                    <option value="1">1+</option>
+                                    <option value="2">2+</option>
+                                    <option value="3">3+</option>
+                                </select>
+                            </div>
+
+                            {/* Garage */}
+                            <div>
+                                <label className="text-xs font-medium text-muted-foreground mb-1.5 flex items-center gap-1">
+                                    <Car className="w-3 h-3" /> Cocheras
+                                </label>
+                                <select
+                                    value={minGarage}
+                                    onChange={e => setMinGarage(e.target.value)}
+                                    className="w-full bg-background border border-border rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-brand outline-none"
+                                >
+                                    <option value="any">Cualquiera</option>
+                                    <option value="1">1+</option>
+                                    <option value="2">2+</option>
+                                </select>
+                            </div>
+
+                            {/* Area Range */}
+                            <div>
+                                <label className="text-xs font-medium text-muted-foreground mb-1.5 flex items-center gap-1">
+                                    <Ruler className="w-3 h-3" /> m² mín
+                                </label>
+                                <input
+                                    type="number"
+                                    placeholder="0"
+                                    value={minArea}
+                                    onChange={e => setMinArea(e.target.value)}
+                                    className="w-full bg-background border border-border rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-brand outline-none"
+                                />
+                            </div>
+                            <div>
+                                <label className="text-xs font-medium text-muted-foreground mb-1.5 flex items-center gap-1">
+                                    <Ruler className="w-3 h-3" /> m² máx
+                                </label>
+                                <input
+                                    type="number"
+                                    placeholder="∞"
+                                    value={maxArea}
+                                    onChange={e => setMaxArea(e.target.value)}
+                                    className="w-full bg-background border border-border rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-brand outline-none"
+                                />
+                            </div>
+
+                            {/* Condition */}
+                            <div>
+                                <label className="text-xs font-medium text-muted-foreground mb-1.5 block">Estado</label>
+                                <select
+                                    value={condition}
+                                    onChange={e => setCondition(e.target.value)}
+                                    className="w-full bg-background border border-border rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-brand outline-none"
+                                >
+                                    <option value="all">Cualquiera</option>
+                                    <option value="nuevo">A Estrenar</option>
+                                    <option value="bueno">Buen Estado</option>
+                                    <option value="a_refaccionar">A Refaccionar</option>
+                                </select>
+                            </div>
+
+                            {/* Amenities */}
+                            {allAmenities.length > 0 && (
+                                <div className="col-span-full">
+                                    <label className="text-xs font-medium text-muted-foreground mb-1.5 block">Amenidades</label>
+                                    <div className="flex flex-wrap gap-2">
+                                        {allAmenities.map(a => (
+                                            <button
+                                                key={a}
+                                                onClick={() => toggleAmenity(a)}
+                                                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${selectedAmenities.includes(a)
+                                                    ? 'bg-brand/10 text-brand'
+                                                    : 'bg-muted text-muted-foreground hover:text-foreground'
+                                                    }`}
+                                            >
+                                                {a.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
                         </div>
-                        <h3 className="text-xl font-heading font-medium mb-2 text-foreground">No encontramos propiedades</h3>
-                        <p className="text-muted-foreground max-w-md">No hay resultados que coincidan con tu búsqueda. Intentá cambiar los filtros o los términos de búsqueda.</p>
-                    </div>
+                    </motion.div>
                 )}
-            </main>
+            </AnimatePresence>
+
+            {/* Property Grid */}
+            {filteredProperties.length > 0 ? (
+                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+                    {filteredProperties.map((property, index) => (
+                        <PropertyCard
+                            key={property.id}
+                            property={property}
+                            cardStyle={cardStyle}
+                            index={index}
+                        />
+                    ))}
+                </div>
+            ) : (
+                <div className="flex flex-col items-center justify-center py-20 bg-muted/30 rounded-3xl border border-dashed border-border text-center">
+                    <div className="w-16 h-16 bg-background rounded-full flex items-center justify-center shadow-sm mb-4">
+                        <Search className="w-8 h-8 text-muted-foreground p-1" />
+                    </div>
+                    <h3 className="text-xl font-heading font-medium mb-2 text-foreground">No encontramos propiedades</h3>
+                    <p className="text-muted-foreground max-w-md">No hay resultados que coincidan con tu búsqueda. Intentá cambiar los filtros o los términos de búsqueda.</p>
+                    <button onClick={clearAll} className="mt-4 text-brand font-medium text-sm hover:underline">
+                        Limpiar todos los filtros
+                    </button>
+                </div>
+            )}
+
+            {/* Sticky AI Search Bar at Bottom */}
+            <div className="fixed bottom-0 left-0 right-0 z-40 pointer-events-none">
+                <div className="max-w-3xl mx-auto px-6 pb-6 pointer-events-auto">
+                    <motion.div
+                        id="tour-ai-search-fixed"
+                        initial={{ y: 20, opacity: 0 }}
+                        animate={{ y: 0, opacity: 1 }}
+                        transition={{ delay: 0.5, type: "spring", stiffness: 300, damping: 30 }}
+                        className="bg-card/95 backdrop-blur-xl border border-border rounded-2xl shadow-2xl shadow-black/20 px-4 py-3 flex items-center gap-3"
+                    >
+                        <div className="flex items-center justify-center w-9 h-9 rounded-xl bg-gradient-to-br from-blue-600/20 to-indigo-600/20 text-blue-400 flex-shrink-0">
+                            <Sparkles className="w-4.5 h-4.5" />
+                        </div>
+
+                        {/* Animated Typing Placeholder */}
+                        <div className="relative flex-1 overflow-hidden flex items-center h-[20px]">
+                            <input
+                                type="text"
+                                value={aiQuery}
+                                onChange={e => setAiQuery(e.target.value)}
+                                onKeyDown={handleKeyDown}
+                                disabled={isAiSearching}
+                                className="absolute inset-0 w-full h-full bg-transparent text-sm outline-none text-foreground placeholder-transparent z-10"
+                            />
+                            {/* Fake placeholder underneath */}
+                            {!aiQuery && (
+                                <span
+                                    className={`absolute left-0 pointer-events-none text-muted-foreground text-sm font-light transition-opacity duration-400 ease-in-out ${placeholderVisible ? "opacity-100" : "opacity-0"
+                                        }`}
+                                >
+                                    {placeholder}
+                                </span>
+                            )}
+                        </div>
+
+                        {aiQuery && !isAiSearching && (
+                            <button
+                                onClick={() => { setAiQuery(''); setAiSearchTerm(''); }}
+                                className="p-1.5 rounded-lg hover:bg-muted text-muted-foreground transition-colors"
+                            >
+                                <X className="w-3.5 h-3.5" />
+                            </button>
+                        )}
+                        <button
+                            onClick={handleAiSearch}
+                            disabled={isAiSearching || !aiQuery.trim()}
+                            className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-blue-600 to-indigo-600 text-white text-sm font-medium rounded-xl disabled:opacity-30 hover:opacity-90 transition-opacity"
+                        >
+                            {isAiSearching ? (
+                                <Loader2 className="w-4 h-4 animate-spin" />
+                            ) : (
+                                <Search className="w-4 h-4" />
+                            )}
+                            <span className="hidden sm:inline">Buscar</span>
+                        </button>
+                    </motion.div>
+                </div>
+            </div>
+        </div>
+    );
+}
+
+// Filter Chip Group component
+function FilterChipGroup({ value, onChange, options, icon }: {
+    value: string;
+    onChange: (v: string) => void;
+    options: { value: string; label: string }[];
+    icon: React.ReactNode;
+}) {
+    const activeOption = options.find(o => o.value === value);
+    const isDefault = value === options[0]?.value;
+
+    return (
+        <div className="relative group inline-flex">
+            <button className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-medium transition-all peer ${!isDefault ? 'bg-brand/10 text-brand' : 'bg-muted text-muted-foreground hover:text-foreground'
+                }`}>
+                {icon}
+                {activeOption?.label || options[0]?.label}
+                <ChevronDown className="w-3 h-3 ml-0.5 opacity-60" />
+            </button>
+            <div className="absolute top-full left-0 mt-1 bg-card border border-border rounded-xl shadow-xl py-1 min-w-[140px] opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50">
+                {options.map(opt => (
+                    <button
+                        key={opt.value}
+                        onClick={() => onChange(opt.value)}
+                        className={`w-full text-left px-4 py-2 text-sm transition-colors ${value === opt.value
+                            ? 'text-brand bg-brand/5 font-medium'
+                            : 'text-foreground hover:bg-muted'
+                            }`}
+                    >
+                        {opt.label}
+                    </button>
+                ))}
+            </div>
         </div>
     );
 }
