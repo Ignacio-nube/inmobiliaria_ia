@@ -6,9 +6,10 @@ import { Database } from "@/lib/database.types";
 import { useRouter } from "next/navigation";
 import {
     Loader2, Upload, MapPin, Bed, Bath, Square, DollarSign,
-    Car, Calendar, Ruler, Tag, Building2, Sparkles, ImageIcon, X, AlertCircle
+    Car, Calendar, Ruler, Tag, Building2, Sparkles, ImageIcon, X, AlertCircle, FileImage, Trash2
 } from "lucide-react";
 import Image from "next/image";
+import { PublishAssistantBot } from "./PublishAssistantBot";
 
 type PropertyInsert = Database['public']['Tables']['properties']['Insert'];
 
@@ -86,10 +87,31 @@ export function PublishForm({ initialData, isAdminEdit = false }: PublishFormPro
 
     const [selectedAmenities, setSelectedAmenities] = useState<string[]>(initialData?.amenities || []);
 
-    const previewImages = formData.imagesStr
+    // File upload state
+    const [imageFiles, setImageFiles] = useState<File[]>([]);
+    const [uploadProgress, setUploadProgress] = useState(0);
+
+    const existingImages = formData.imagesStr
         .split(/[\n,]/)
         .map(s => s.trim())
         .filter(s => s.length > 0 && s.startsWith('http'));
+
+    const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        if (e.target.files) {
+            setImageFiles(prev => [...prev, ...Array.from(e.target.files!)]);
+        }
+    };
+
+    const removeFile = (index: number) => {
+        setImageFiles(prev => prev.filter((_, i) => i !== index));
+    };
+
+    const removeExistingImage = (url: string) => {
+        setFormData(prev => ({
+            ...prev,
+            imagesStr: existingImages.filter(img => img !== url).join('\n')
+        }));
+    };
 
     const toggleAmenity = (a: string) => {
         setSelectedAmenities(prev =>
@@ -111,10 +133,39 @@ export function PublishForm({ initialData, isAdminEdit = false }: PublishFormPro
                 process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
             );
 
-            const images = formData.imagesStr
-                .split(/[\n,]/)
-                .map(s => s.trim())
-                .filter(s => s.length > 0);
+            // Upload the new files to storage first
+            const newUploadedUrls: string[] = [];
+
+            if (imageFiles.length > 0) {
+                setUploadProgress(10);
+                for (let i = 0; i < imageFiles.length; i++) {
+                    const file = imageFiles[i];
+                    const fileExt = file.name.split('.').pop();
+                    const fileName = `${Math.random().toString(36).substring(2, 15)}_${Date.now()}.${fileExt}`;
+                    const filePath = `property-uploads/${fileName}`;
+
+                    const { error: uploadError, data } = await supabase.storage
+                        .from('properties') // Assume bucket is 'properties'
+                        .upload(filePath, file);
+
+                    if (uploadError) {
+                        console.error('Error uploading image', uploadError);
+                        setErrorMsg(`Error al subir la imagen ${file.name}: ${uploadError.message}`);
+                        return; // Stop submission on error
+                    }
+
+                    if (data) {
+                        const { data: { publicUrl } } = supabase.storage
+                            .from('properties')
+                            .getPublicUrl(filePath);
+                        newUploadedUrls.push(publicUrl);
+                    }
+
+                    setUploadProgress(10 + Math.floor(((i + 1) / imageFiles.length) * 80));
+                }
+            }
+
+            const finalImages = [...existingImages, ...newUploadedUrls];
 
             const propertyData: PropertyInsert = {
                 title: formData.title,
@@ -138,7 +189,7 @@ export function PublishForm({ initialData, isAdminEdit = false }: PublishFormPro
                 expenses: formData.expenses ? parseFloat(formData.expenses) : null,
                 latitude: formData.latitude ? parseFloat(formData.latitude) : null,
                 longitude: formData.longitude ? parseFloat(formData.longitude) : null,
-                images,
+                images: finalImages,
                 amenities: selectedAmenities,
                 ...(isAdminEdit ? {} : { approval_status: 'pending', published: false }),
             };
@@ -197,6 +248,9 @@ export function PublishForm({ initialData, isAdminEdit = false }: PublishFormPro
                     </button>
                 </div>
             )}
+
+            {/* AI Assistant Bot Component */}
+            {!isAdminEdit && <PublishAssistantBot />}
 
             {/* 1. Información Principal */}
             <FormSection icon={<Building2 className="w-5 h-5" />} title="Información Principal">
@@ -344,27 +398,56 @@ export function PublishForm({ initialData, isAdminEdit = false }: PublishFormPro
             {/* 6. Imágenes */}
             <FormSection icon={<ImageIcon className="w-5 h-5" />} title="Imágenes">
                 <div>
-                    <FieldLabel>URLs de imágenes <span className="text-xs text-muted-foreground/60">(una por línea o separadas por coma)</span></FieldLabel>
-                    <textarea name="imagesStr"
-                        value={formData.imagesStr}
-                        onChange={handleChange as any}
-                        rows={3}
-                        placeholder={"https://ejemplo.com/foto1.jpg\nhttps://ejemplo.com/foto2.jpg"}
-                        className={`${inputCls} resize-y font-mono text-xs`}
-                    />
+                    <label className="relative flex flex-col items-center justify-center w-full h-32 border-2 border-dashed border-border rounded-xl bg-muted/30 hover:bg-muted/50 transition-colors cursor-pointer overflow-hidden group">
+                        <div className="flex flex-col items-center justify-center pt-5 pb-6">
+                            <FileImage className="w-8 h-8 text-muted-foreground mb-3 group-hover:text-brand transition-colors" />
+                            <p className="mb-1 text-sm text-muted-foreground"><span className="font-semibold text-foreground">Haz click para subir</span> o arrastra y suelta</p>
+                            <p className="text-xs text-muted-foreground/70">SVG, PNG, JPG o WEBP (Max. 5MB por foto)</p>
+                        </div>
+                        <input type="file" className="hidden" multiple accept="image/*" onChange={handleFileChange} />
+                    </label>
                 </div>
 
-                {/* Live image preview strip */}
-                {previewImages.length > 0 && (
-                    <div className="flex gap-3 flex-wrap mt-2">
-                        {previewImages.map((url, i) => (
-                            <div key={i} className="relative w-24 h-16 rounded-xl overflow-hidden border border-border">
-                                <Image src={url} alt={`Preview ${i + 1}`} fill className="object-cover" />
-                                <div className="absolute bottom-0 left-0 right-0 text-[9px] text-white text-center bg-black/50 py-0.5">
-                                    #{i + 1}
+                {/* Previews of newly selected files */}
+                {imageFiles.length > 0 && (
+                    <div className="mt-4">
+                        <FieldLabel>Archivos Seleccionados ({imageFiles.length})</FieldLabel>
+                        <div className="flex gap-3 flex-wrap mt-2">
+                            {imageFiles.map((file, i) => (
+                                <div key={i} className="relative w-24 h-24 rounded-xl overflow-hidden border border-border group bg-muted/30">
+                                    <img src={URL.createObjectURL(file)} alt={`Preview ${i}`} className="object-cover w-full h-full" />
+                                    <button
+                                        type="button"
+                                        onClick={() => removeFile(i)}
+                                        className="absolute top-1 right-1 p-1 bg-black/50 hover:bg-red-500 rounded-full text-white opacity-0 group-hover:opacity-100 transition-all"
+                                    >
+                                        <X className="w-3 h-3" />
+                                    </button>
                                 </div>
-                            </div>
-                        ))}
+                            ))}
+                        </div>
+                    </div>
+                )}
+
+                {/* Previews of already existing images (if editing) */}
+                {existingImages.length > 0 && (
+                    <div className="mt-4">
+                        <FieldLabel>Imágenes Existentes ({existingImages.length})</FieldLabel>
+                        <div className="flex gap-3 flex-wrap mt-2">
+                            {existingImages.map((url, i) => (
+                                <div key={i} className="relative w-24 h-24 rounded-xl overflow-hidden border border-border group">
+                                    <Image src={url} alt={`Existing ${i}`} fill className="object-cover" />
+                                    <button
+                                        type="button"
+                                        onClick={() => removeExistingImage(url)}
+                                        className="absolute top-1 right-1 p-1 bg-black/50 hover:bg-red-500 rounded-full text-white opacity-0 group-hover:opacity-100 transition-all"
+                                    >
+                                        <Trash2 className="w-3 h-3" />
+                                    </button>
+                                </div>
+                            ))}
+                        </div>
+                        {/* Hidden input to maintain existing string if needed, though we manage it via state */}
                     </div>
                 )}
             </FormSection>
@@ -373,13 +456,17 @@ export function PublishForm({ initialData, isAdminEdit = false }: PublishFormPro
             <button
                 type="submit"
                 disabled={isPending}
-                className="w-full py-4 bg-gradient-to-r from-brand to-blue-600 text-white text-base font-semibold rounded-2xl hover:opacity-90 transition-opacity disabled:opacity-50 flex items-center justify-center gap-2"
+                className="w-full py-4 bg-gradient-to-r from-brand to-brand/80 text-white text-base font-semibold rounded-2xl shadow-[0_4px_15px_rgba(0,0,0,0.1)] hover:shadow-[0_4px_25px_rgba(brand,0.4)] transition-all disabled:opacity-50 flex items-center justify-center gap-2 relative overflow-hidden group"
             >
-                {isPending ? (
-                    <><Loader2 className="w-5 h-5 animate-spin" /> Guardando...</>
-                ) : (
-                    <><Upload className="w-5 h-5" />{initialData ? 'Guardar Cambios' : 'Enviar para Revisión'}</>
-                )}
+                <div className="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform duration-300 ease-in-out" />
+
+                <span className="relative z-10 flex items-center gap-2">
+                    {isPending ? (
+                        <><Loader2 className="w-5 h-5 animate-spin" /> {uploadProgress > 0 ? `Subiendo... ${uploadProgress}%` : 'Guardando...'}</>
+                    ) : (
+                        <><Upload className="w-5 h-5" />{initialData ? 'Guardar Cambios' : 'Enviar para Revisión'}</>
+                    )}
+                </span>
             </button>
         </form>
     );

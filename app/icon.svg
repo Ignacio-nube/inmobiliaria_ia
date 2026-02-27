@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#d4af37" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+    <!-- Define the gradient matching Logo.tsx (from-brand to-slate-900) -->
+    <defs>
+        <linearGradient id="logo-gradient" x1="0%" y1="0%" x2="100%" y2="100%">
+            <!-- Brand color: #080c1c (Dark Navy) -->
+            <stop offset="0%" stop-color="#080c1c" />
+            <!-- Slate 900: #0f172a -->
+            <stop offset="100%" stop-color="#0f172a" />
+        </linearGradient>
+    </defs>
+    <!-- Background rounded rect with the gradient and a subtle gold border simulation -->
+    <rect width="24" height="24" rx="6" fill="url(#logo-gradient)" stroke="#d4af37" stroke-width="0.5" stroke-opacity="0.3" />
+    
+    <!-- Gold cloud -->
+    <path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z" />
+</svg>

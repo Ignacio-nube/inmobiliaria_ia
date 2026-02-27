@@ -8,6 +8,11 @@ export const revalidate = 0;
 export default async function AdminDashboardPage() {
     const supabase = await createClient();
 
+    // Ensure purity by caching the dates once outside the effect/render or using variables
+    const now = Date.now();
+    const sevenDaysAgo = new Date(now - 7 * 24 * 60 * 60 * 1000).toISOString();
+    const fourteenDaysAgo = new Date(now - 14 * 24 * 60 * 60 * 1000).toISOString();
+
     // Parallel data fetching — only what the server needs
     const [
         allPropertiesRes,
@@ -20,10 +25,10 @@ export default async function AdminDashboardPage() {
         supabase.from("properties").select("*").eq("approval_status", "pending").order("created_at", { ascending: false }),
         supabase.from("contacts").select("id", { count: "exact", head: true }).eq("status", "new"),
         supabase.from("page_views").select("id", { count: "exact", head: true })
-            .gte("viewed_at", new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()),
+            .gte("viewed_at", sevenDaysAgo),
         supabase.from("page_views").select("id", { count: "exact", head: true })
-            .gte("viewed_at", new Date(Date.now() - 14 * 24 * 60 * 60 * 1000).toISOString())
-            .lt("viewed_at", new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()),
+            .gte("viewed_at", fourteenDaysAgo)
+            .lt("viewed_at", sevenDaysAgo),
     ]);
 
     const allProperties = allPropertiesRes.data || [];

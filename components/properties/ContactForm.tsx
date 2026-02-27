@@ -109,10 +109,16 @@ export function ContactForm({ propertyId, propertyTitle }: ContactFormProps) {
             <button
                 type="submit"
                 disabled={loading}
-                className="w-full py-3 bg-brand text-white rounded-xl font-medium hover:bg-gold hover:text-black transition-colors flex justify-center items-center gap-2 disabled:opacity-70"
+                className="relative overflow-hidden w-full py-3.5 bg-gradient-to-r from-brand to-brand/80 text-white rounded-xl font-medium shadow-[0_4px_15px_rgba(0,0,0,0.1)] hover:shadow-[0_4px_25px_rgba(brand,0.4)] transition-all flex justify-center items-center gap-2 group disabled:opacity-70 disabled:pointer-events-none"
             >
-                {loading && <Loader2 className="w-4 h-4 animate-spin" />}
-                <span>Solicitar Visita</span>
+                {/* Premium pulse glow effect in the background */}
+                <div className="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform duration-300 ease-in-out" />
+                <div className="absolute inset-0 rounded-xl ring-2 ring-white/10 ring-offset-2 ring-offset-background group-hover:ring-brand/50 transition-all duration-300" />
+
+                <div className="relative z-10 flex items-center gap-2">
+                    {loading && <Loader2 className="w-4 h-4 animate-spin" />}
+                    <span>Enviar Consulta</span>
+                </div>
             </button>
         </form>
     );

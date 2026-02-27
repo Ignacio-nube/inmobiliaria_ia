@@ -2,13 +2,30 @@ import { Metadata } from 'next';
 import { ContactForm } from '@/components/properties/ContactForm';
 import { Mail, MapPin, Phone, Clock, ArrowRight } from 'lucide-react';
 import Image from 'next/image';
+import { createClient } from '@/lib/supabase/server';
 
 export const metadata: Metadata = {
     title: 'Contacto',
     description: 'Comunicate con Ignacio Propiedades. Estamos aquí para ayudarte a encontrar o vender tu hogar en Tucumán.',
 };
 
-export default function ContactoPage() {
+export default async function ContactoPage() {
+    const supabase = await createClient();
+
+    // Fetch dynamic site settings
+    const { data: settings } = await supabase
+        .from('site_settings')
+        .select('contact_address, contact_phone, contact_email')
+        .limit(1)
+        .single();
+
+    const address = settings?.contact_address || 'Av. Aconquija 2000, Yerba Buena, Tucumán, Argentina';
+    const phone = settings?.contact_phone || '+54 9 381 555-0192';
+    const email = settings?.contact_email || 'hola@ignaciopropiedades.com';
+
+    // Create WhatsApp link from phone number (strip non-numeric chars)
+    const phoneDigits = phone.replace(/\D/g, '');
+    const whatsappLink = phoneDigits ? `https://wa.me/${phoneDigits}` : 'https://wa.me/5493815550192';
     // Note: Since this is a general contact page, it's not tied to a specific property.
     // However, our ContactForm component expects propertyId and propertyTitle right now.
     // It's probably better to create a standalone version or pass null/empty strings if supported
@@ -48,7 +65,7 @@ export default function ContactoPage() {
                                     </div>
                                     <div>
                                         <h3 className="font-semibold text-lg">Sede Central</h3>
-                                        <p className="text-muted-foreground mt-1">Av. Aconquija 2000, Yerba Buena<br />Tucumán, Argentina</p>
+                                        <p className="text-muted-foreground mt-1">{address}</p>
                                     </div>
                                 </div>
 
@@ -58,7 +75,7 @@ export default function ContactoPage() {
                                     </div>
                                     <div>
                                         <h3 className="font-semibold text-lg">Llamanos</h3>
-                                        <p className="text-muted-foreground mt-1">+54 9 381 555-0192</p>
+                                        <p className="text-muted-foreground mt-1">{phone}</p>
                                     </div>
                                 </div>
 
@@ -68,7 +85,7 @@ export default function ContactoPage() {
                                     </div>
                                     <div>
                                         <h3 className="font-semibold text-lg">Email</h3>
-                                        <p className="text-muted-foreground mt-1">hola@ignaciopropiedades.com</p>
+                                        <p className="text-muted-foreground mt-1">{email}</p>
                                     </div>
                                 </div>
 
@@ -86,7 +103,7 @@ export default function ContactoPage() {
 
                         {/* WhatsApp CTA */}
                         <a
-                            href="https://wa.me/5493815550192"
+                            href={whatsappLink}
                             target="_blank"
                             rel="noreferrer"
                             className="bg-green-500 hover:bg-green-600 transition-colors rounded-3xl p-8 flex flex-col justify-center text-white relative overflow-hidden group"

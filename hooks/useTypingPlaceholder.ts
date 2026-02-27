@@ -38,7 +38,9 @@ export function useTypingPlaceholder(
 
         if (isDeleting && subIndex === 0) {
             // Move to next word when fully deleted
+            // eslint-disable-next-line react-hooks/set-state-in-effect
             setIsDeleting(false);
+            // eslint-disable-next-line react-hooks/set-state-in-effect
             setIndex((prev) => (prev + 1) % placeholders.length);
             return;
         }
