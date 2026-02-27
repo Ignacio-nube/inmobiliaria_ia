@@ -43,7 +43,7 @@ export function HomeContent({ properties, heroTitle, heroSubtitle, cardStyle, he
 
     // Hooks for new animations
     const { ref: heroRef, backgroundY, opacity: heroOpacity } = useParallax(0.35);
-    const { placeholder, visible: placeholderVisible } = useTypingPlaceholder(SEARCH_PLACEHOLDERS, 3000);
+    const { placeholder } = useTypingPlaceholder(SEARCH_PLACEHOLDERS);
 
     useEffect(() => {
         if (heroImages.length <= 1) return;
@@ -202,10 +202,7 @@ export function HomeContent({ properties, heroTitle, heroSubtitle, cardStyle, he
                                         />
                                         {/* Fake placeholder underneath */}
                                         {!searchQuery && (
-                                            <span
-                                                className={`absolute left-0 pointer-events-none text-white/60 text-lg sm:text-xl font-light transition-opacity duration-400 ease-in-out ${placeholderVisible ? "opacity-100" : "opacity-0"
-                                                    }`}
-                                            >
+                                            <span className="absolute left-0 pointer-events-none text-white/60 text-lg sm:text-xl font-light">
                                                 {placeholder}
                                             </span>
                                         )}

@@ -9,6 +9,7 @@ import {
     Building2, Wallet, Bed, Bath, Car, MapPin, Ruler, Tag, Loader2
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { createPortal } from 'react-dom';
 import { useTypingPlaceholder } from '@/hooks/useTypingPlaceholder';
 
 // Typing placeholders for AI Search
@@ -83,7 +84,13 @@ export function PropertiesClient({ initialProperties, cardStyle }: PropertiesCli
     const [isAiSearching, setIsAiSearching] = useState(false);
 
     // Typing Placeholder Hook
-    const { placeholder, visible: placeholderVisible } = useTypingPlaceholder(SEARCH_PLACEHOLDERS, 3000);
+    const { placeholder } = useTypingPlaceholder(SEARCH_PLACEHOLDERS);
+
+    // Track mount state for SSR safe Portals
+    const [mounted, setMounted] = useState(false);
+    useEffect(() => {
+        setMounted(true);
+    }, []);
 
     // Gather unique neighborhoods
     const neighborhoods = useMemo(() => {
@@ -437,36 +444,33 @@ export function PropertiesClient({ initialProperties, cardStyle }: PropertiesCli
                 </div>
             )}
 
-            {/* Sticky AI Search Bar at Bottom */}
-            <div className="fixed bottom-0 left-0 right-0 z-40 pointer-events-none">
-                <div className="max-w-3xl mx-auto px-6 pb-6 pointer-events-auto">
+            {/* Sticky AI Search Bar at Bottom (Claude / ChatGPT Premium Style) */}
+            {mounted && typeof document !== 'undefined' && createPortal(
+                <div className="fixed bottom-6 w-full z-50 pointer-events-none flex justify-center px-4" style={{ left: 0 }}>
                     <motion.div
                         id="tour-ai-search-fixed"
-                        initial={{ y: 20, opacity: 0 }}
+                        initial={{ y: 50, opacity: 0 }}
                         animate={{ y: 0, opacity: 1 }}
-                        transition={{ delay: 0.5, type: "spring", stiffness: 300, damping: 30 }}
-                        className="bg-card/95 backdrop-blur-xl border border-border rounded-2xl shadow-2xl shadow-black/20 px-4 py-3 flex items-center gap-3"
+                        transition={{ delay: 0.1, type: "spring", stiffness: 400, damping: 25 }}
+                        className="w-full max-w-3xl pointer-events-auto shadow-[0_8px_40px_rgba(0,0,0,0.12)] rounded-full bg-background/80 backdrop-blur-2xl border border-border/50 p-2 flex items-center gap-3 transition-all hover:shadow-[0_8px_50px_rgba(0,0,0,0.16)] hover:border-brand/30 group"
                     >
-                        <div className="flex items-center justify-center w-9 h-9 rounded-xl bg-gradient-to-br from-blue-600/20 to-indigo-600/20 text-blue-400 flex-shrink-0">
-                            <Sparkles className="w-4.5 h-4.5" />
+                        <div className="flex items-center justify-center w-10 h-10 rounded-full bg-brand/10 text-brand flex-shrink-0 group-hover:scale-105 transition-transform">
+                            <Sparkles className="w-5 h-5" />
                         </div>
 
                         {/* Animated Typing Placeholder */}
-                        <div className="relative flex-1 overflow-hidden flex items-center h-[20px]">
+                        <div className="relative flex-1 overflow-hidden flex items-center h-[24px]">
                             <input
                                 type="text"
                                 value={aiQuery}
                                 onChange={e => setAiQuery(e.target.value)}
                                 onKeyDown={handleKeyDown}
                                 disabled={isAiSearching}
-                                className="absolute inset-0 w-full h-full bg-transparent text-sm outline-none text-foreground placeholder-transparent z-10"
+                                className="absolute inset-0 w-full h-full bg-transparent text-base outline-none text-foreground placeholder-transparent z-10"
                             />
                             {/* Fake placeholder underneath */}
                             {!aiQuery && (
-                                <span
-                                    className={`absolute left-0 pointer-events-none text-muted-foreground text-sm font-light transition-opacity duration-400 ease-in-out ${placeholderVisible ? "opacity-100" : "opacity-0"
-                                        }`}
-                                >
+                                <span className="absolute left-0 pointer-events-none text-muted-foreground text-base">
                                     {placeholder}
                                 </span>
                             )}
@@ -475,26 +479,26 @@ export function PropertiesClient({ initialProperties, cardStyle }: PropertiesCli
                         {aiQuery && !isAiSearching && (
                             <button
                                 onClick={() => { setAiQuery(''); setAiSearchTerm(''); }}
-                                className="p-1.5 rounded-lg hover:bg-muted text-muted-foreground transition-colors"
+                                className="p-2 rounded-full hover:bg-muted text-muted-foreground transition-colors"
                             >
-                                <X className="w-3.5 h-3.5" />
+                                <X className="w-4 h-4" />
                             </button>
                         )}
                         <button
                             onClick={handleAiSearch}
                             disabled={isAiSearching || !aiQuery.trim()}
-                            className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-blue-600 to-indigo-600 text-white text-sm font-medium rounded-xl disabled:opacity-30 hover:opacity-90 transition-opacity"
+                            className="flex items-center justify-center w-10 h-10 rounded-full bg-foreground text-background disabled:opacity-30 hover:scale-105 active:scale-95 transition-all flex-shrink-0"
                         >
                             {isAiSearching ? (
-                                <Loader2 className="w-4 h-4 animate-spin" />
+                                <Loader2 className="w-5 h-5 animate-spin" />
                             ) : (
-                                <Search className="w-4 h-4" />
+                                <Search className="w-5 h-5" />
                             )}
-                            <span className="hidden sm:inline">Buscar</span>
                         </button>
                     </motion.div>
-                </div>
-            </div>
+                </div>,
+                document.body
+            )}
         </div>
     );
 }
