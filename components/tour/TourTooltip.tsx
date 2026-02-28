@@ -22,11 +22,17 @@ export function TourTooltip({ step, targetRect, windowSize }: TourTooltipProps) 
     let top = targetRect.bottom + padding;
     const tooltipEstimatedHeight = 220;
 
-    // If target is near the bottom of the visible screen (like our sticky search), force it above.
-    const isAbove = targetRect.bottom + tooltipEstimatedHeight > windowSize.height;
-
-    if (isAbove) {
-        top = targetRect.top - padding - tooltipEstimatedHeight;
+    // If placing it below the target overflows the visible screen
+    if (top + tooltipEstimatedHeight > windowSize.height - padding) {
+        // Try placing it above the target
+        const topAbove = targetRect.top - padding - tooltipEstimatedHeight;
+        if (topAbove >= padding) {
+            top = topAbove;
+        } else {
+            // Target takes up the whole screen or there's no space above/below.
+            // Vertically clamp it to the window viewport so it NEVER gets cut off.
+            top = Math.max(padding, Math.min(top, windowSize.height - tooltipEstimatedHeight - padding));
+        }
     }
 
     return (

@@ -13,10 +13,10 @@ export const TOUR_STEPS = [
         targetId: "tour-search-bar",
     },
     {
-        id: "featured-properties-carousel",
-        title: "Propiedades Destacadas",
-        description: "Deslizá para descubrir las mejores oportunidades seleccionadas especialmente para vos.",
-        targetId: "tour-properties-carousel",
+        id: "publish-property-cta",
+        title: "Publicar Propiedad",
+        description: "¿Tenés una propiedad para alquilar o vender? Publicala en nuestra plataforma fácilmente.",
+        targetId: "tour-publish-property",
     }
 ];
 

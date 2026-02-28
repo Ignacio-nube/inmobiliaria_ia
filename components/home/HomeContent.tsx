@@ -237,7 +237,7 @@ export function HomeContent({ properties, heroTitle, heroSubtitle, cardStyle, he
             )}
 
             {/* Call to Action for Agencies/Owners - Dynamic Premium Redesign */}
-            <section className="py-32 px-6 relative overflow-hidden flex flex-col items-center justify-center border-t border-border/10">
+            <section id="tour-publish-property" className="py-32 px-6 relative overflow-hidden flex flex-col items-center justify-center border-t border-border/10">
                 {/* Advanced Gradient Animated Background */}
                 <motion.div
                     animate={{
