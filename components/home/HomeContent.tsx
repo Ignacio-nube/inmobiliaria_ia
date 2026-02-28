@@ -95,7 +95,7 @@ export function HomeContent({ properties, heroTitle, heroSubtitle, cardStyle, he
             {/* Hero Section with Parallax */}
             <section
                 ref={heroRef}
-                className="relative w-full min-h-[92vh] flex flex-col items-center justify-center overflow-hidden px-6 pt-24 pb-12"
+                className="relative w-full min-h-[85vh] flex flex-col items-center justify-center overflow-hidden px-6 pt-24 pb-12"
             >
                 {/* Background Image with Parallax, Overlay & Crossfade */}
                 <motion.div
@@ -126,7 +126,7 @@ export function HomeContent({ properties, heroTitle, heroSubtitle, cardStyle, he
                 </motion.div>
 
                 <div className="absolute top-0 flex items-center justify-center w-full -z-10">
-                    <div className="w-[60vw] h-[50vh] bg-brand/20 rounded-full blur-[120px] translate-y-[-50%]" />
+                    <div className="hidden md:block w-[60vw] h-[50vh] bg-brand/20 rounded-full blur-[120px] translate-y-[-50%]" />
                 </div>
 
                 <motion.div
@@ -143,7 +143,7 @@ export function HomeContent({ properties, heroTitle, heroSubtitle, cardStyle, he
                     }}
                     className="max-w-5xl mx-auto text-center z-10 flex flex-col items-center"
                 >
-                    <motion.div variants={FADE_UP_ANIMATION_VARIANTS} className="mb-8 flex items-center gap-2 px-5 py-2.5 rounded-full bg-black/50 border border-white/20 text-white backdrop-blur-md text-sm font-medium shadow-2xl">
+                    <motion.div variants={FADE_UP_ANIMATION_VARIANTS} className="mb-4 md:mb-8 flex items-center gap-2 px-5 py-2.5 rounded-full bg-black/50 border border-white/20 text-white backdrop-blur-md text-sm font-medium shadow-2xl">
                         <Sparkles className="w-4 h-4 text-gold" />
                         <span>Búsqueda Inteligente con IA para Tucumán</span>
                     </motion.div>
@@ -169,7 +169,7 @@ export function HomeContent({ properties, heroTitle, heroSubtitle, cardStyle, he
 
                     <motion.p
                         variants={FADE_UP_ANIMATION_VARIANTS}
-                        className="text-lg md:text-2xl text-white/80 max-w-2xl mb-14 text-balance leading-relaxed font-light"
+                        className="text-lg md:text-2xl text-white/80 max-w-2xl mb-8 md:mb-14 text-balance leading-relaxed font-light"
                     >
                         {heroSubtitle}
                     </motion.p>
@@ -259,7 +259,7 @@ export function HomeContent({ properties, heroTitle, heroSubtitle, cardStyle, he
                             y: [0, -40, 0]
                         }}
                         transition={{ duration: 15, repeat: Infinity, ease: "easeInOut" }}
-                        className="absolute top-[-20%] left-[-10%] w-[60vw] h-[60vw] max-w-[800px] max-h-[800px] rounded-full bg-brand/30 blur-[100px]"
+                        className="hidden md:block absolute top-[-20%] left-[-10%] w-[60vw] h-[60vw] max-w-[800px] max-h-[800px] rounded-full bg-brand/30 blur-[100px]"
                         style={{ willChange: "transform, opacity" }}
                     />
                     <motion.div
@@ -271,7 +271,7 @@ export function HomeContent({ properties, heroTitle, heroSubtitle, cardStyle, he
                             y: [0, 40, 0]
                         }}
                         transition={{ duration: 18, repeat: Infinity, ease: "easeInOut", delay: 2 }}
-                        className="absolute bottom-[-20%] right-[-10%] w-[50vw] h-[50vw] max-w-[600px] max-h-[600px] rounded-full bg-gold/15 blur-[120px]"
+                        className="hidden md:block absolute bottom-[-20%] right-[-10%] w-[50vw] h-[50vw] max-w-[600px] max-h-[600px] rounded-full bg-gold/15 blur-[120px]"
                         style={{ willChange: "transform, opacity" }}
                     />
                 </div>
@@ -400,7 +400,7 @@ function FeaturedCarousel({ properties, cardStyle }: { properties: Property[]; c
                             const propIdx = (active + slot) % total;
                             const property = properties[propIdx];
                             return (
-                                <div key={`${active}-${slot}`} className={slot > 0 ? "hidden md:block" : ""}>
+                                <div key={slot} className={slot > 0 ? "hidden md:block" : ""}>
                                     <PropertyCard property={property} cardStyle={cardStyle} index={slot} />
                                 </div>
                             );

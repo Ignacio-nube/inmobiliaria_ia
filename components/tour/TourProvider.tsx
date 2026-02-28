@@ -7,10 +7,16 @@ import { TourOverlay } from "./TourOverlay";
 // Define the steps of our tour
 export const TOUR_STEPS = [
     {
-        id: "ai-search-fixed",
+        id: "ai-search-home",
         title: "Buscador Inteligente IA",
         description: "Encontrá lo que buscás usando lenguaje natural. Nuestra IA analizará tus palabras y aplicará los filtros correctos.",
-        targetId: "tour-ai-search-fixed",
+        targetId: "tour-search-bar",
+    },
+    {
+        id: "featured-properties-carousel",
+        title: "Propiedades Destacadas",
+        description: "Deslizá para descubrir las mejores oportunidades seleccionadas especialmente para vos.",
+        targetId: "tour-properties-carousel",
     }
 ];
 
@@ -50,11 +56,10 @@ export function TourProvider({ children }: TourProviderProps) {
         // Check if tour was already completed
         const isCompleted = localStorage.getItem("tour_completed");
 
-        // Auto-start ONLY if not completed AND we are on the main properties catalog page
-        // Only matching '/propiedades' exactly or with query params
-        const isPropertyPage = pathname === '/propiedades';
+        // Auto-start ONLY if not completed AND we are on the main home page
+        const isHomePage = pathname === '/';
 
-        if (isCompleted !== "true" && isPropertyPage) {
+        if (isCompleted !== "true" && isHomePage) {
             // Small delay to ensure UI is ready
             const timer = setTimeout(() => {
                 setIsActive(true);
