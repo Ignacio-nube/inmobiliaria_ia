@@ -11,6 +11,7 @@ import {
 import { motion, AnimatePresence } from 'framer-motion';
 import { createPortal } from 'react-dom';
 import { useTypingPlaceholder } from '@/hooks/useTypingPlaceholder';
+import Fuse from 'fuse.js';
 
 // Typing placeholders for AI Search
 const SEARCH_PLACEHOLDERS = [
@@ -187,16 +188,32 @@ export function PropertiesClient({ initialProperties, cardStyle }: PropertiesCli
 
     // Filter properties
     const filteredProperties = useMemo(() => {
+        // Prepare fuse instance early for text search
+        let matchedIds = new Set<string>();
+
+        if (aiSearchTerm) {
+            const fuse = new Fuse(initialProperties, {
+                keys: [
+                    { name: 'title', weight: 2 },
+                    { name: 'description', weight: 1 },
+                    { name: 'neighborhood', weight: 1.5 },
+                    { name: 'address', weight: 1.5 },
+                    { name: 'city', weight: 1.2 },
+                    { name: 'amenities', weight: 1 }
+                ],
+                threshold: 0.3, // Allow a moderate amount of typos (fuzzy search)
+                ignoreLocation: true,
+                useExtendedSearch: true
+            });
+
+            const results = fuse.search(aiSearchTerm);
+            matchedIds = new Set(results.map(r => r.item.id));
+        }
+
         return initialProperties.filter(property => {
             // Text search
-            if (aiSearchTerm) {
-                const term = aiSearchTerm.toLowerCase();
-                const searchable = [
-                    property.title, property.location, property.description,
-                    property.neighborhood, property.address, property.city,
-                    ...(property.amenities || [])
-                ].filter(Boolean).join(' ').toLowerCase();
-                if (!searchable.includes(term)) return false;
+            if (aiSearchTerm && !matchedIds.has(property.id)) {
+                return false;
             }
 
             // Operation

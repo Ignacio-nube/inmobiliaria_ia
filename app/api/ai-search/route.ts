@@ -28,13 +28,17 @@ export async function POST(req: Request) {
 Sos un asistente inmobiliario en Tucumán, Argentina. 
 Analizá esta búsqueda del usuario: "${query}"
 
+IMPORTANTE SOBRE BÚSQUEDAS:
+- Los usuarios suelen escribir con errores ortográficos, sin tildes, o de forma coloquial (ej: "yerva wena" -> "Yerba Buena", "picina" -> "pileta", "caza" -> "Casa").
+- Intentá interpretar correctamente lo que buscan. Si mencionan algo específico que no es un tipo de propiedad estándar (ej: "departamento con asador y picina"), extraé "asador pileta" como searchTerm.
+
 Extraé los siguientes parámetros en formato JSON estricto:
-- "searchTerm": Texto libre para buscar en títulos, ubicaciones, amenidades (ej: "pileta", "vista"). Si no hay, string vacío "".
-- "propertyType": Solo uno de: "all", "Casa", "Departamento", "Terreno", "Local", "Oficina", "Duplex". Si no se especifica, "all".
+- "searchTerm": Texto libre clave para buscar en títulos, descripciones o amenidades (ej: "pileta", "vista", "asador", "jardin"). Si no hay, string vacío "". Corrige errores ortográficos si los detectas.
+- "propertyType": Solo uno de: "all", "Casa", "Departamento", "Terreno", "Local", "Oficina", "Duplex". Si no se especifica explícitamente, "all".
 - "minBedrooms": Mínimo de habitaciones (ej: "2"). Si no se especifica, "any".
 - "priceRange": Solo uno de: "all", "under50k", "50k-100k", "100k-250k", "over250k". Si no se especifica, "all".
 - "operationType": Solo uno de: "all", "venta", "alquiler", "alquiler_temporal". Si no se especifica, "all".
-- "neighborhood": Nombre del barrio si se menciona (ej: "Yerba Buena", "Centro"). Si no se menciona, "".
+- "neighborhood": Nombre del barrio si se menciona e interpretas cuál es (ej: "Yerba Buena", "Centro", "Barrio Norte"). Si no se menciona, "".
 
 IMPORTANTE: Devolvé ÚNICAMENTE un JSON válido, sin delimitadores \`\`\`json ni texto adicional.
 `;
