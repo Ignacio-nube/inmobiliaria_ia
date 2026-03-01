@@ -1,5 +1,12 @@
 import { createClient } from '@/lib/supabase/server';
 import { HomeContent } from '@/components/home/HomeContent';
+import { Metadata } from 'next';
+
+export const metadata: Metadata = {
+  alternates: {
+    canonical: 'https://ignacio.cloud',
+  }
+};
 
 // This is a Next.js Server Component that runs on the server.
 // It fetches initial data from Supabase with zero client JS bundle cost.
@@ -41,13 +48,36 @@ export default async function HomePage() {
     .map((url: string) => url.trim())
     .filter((url: string) => url.length > 0);
 
+  const jsonLd = {
+    "@context": "https://schema.org",
+    "@type": "RealEstateAgent",
+    "name": "Ignacio Propiedades",
+    "image": heroImages[0],
+    "url": "https://ignacio.cloud",
+    // We try to grab the settings phone/address or use defaults
+    "telephone": (settings as any)?.contact_phone || "+5493815550192",
+    "address": {
+      "@type": "PostalAddress",
+      "streetAddress": (settings as any)?.contact_address || "Tucumán, Argentina",
+      "addressLocality": "Tucumán",
+      "addressCountry": "AR"
+    },
+    "description": heroSubtitle
+  };
+
   return (
-    <HomeContent
-      properties={properties || []}
-      heroTitle={heroTitle}
-      heroSubtitle={heroSubtitle}
-      cardStyle={cardStyle}
-      heroImages={heroImages}
-    />
+    <>
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+      />
+      <HomeContent
+        properties={properties || []}
+        heroTitle={heroTitle}
+        heroSubtitle={heroSubtitle}
+        cardStyle={cardStyle}
+        heroImages={heroImages}
+      />
+    </>
   );
 }

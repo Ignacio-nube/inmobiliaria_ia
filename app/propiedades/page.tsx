@@ -5,6 +5,9 @@ import { Suspense } from 'react';
 export const metadata = {
     title: 'Todas las Propiedades',
     description: 'Explora nuestro catálogo completo de propiedades en Tucumán. Casas, departamentos, duplex y terrenos en venta y alquiler.',
+    alternates: {
+        canonical: 'https://ignacio.cloud/propiedades',
+    }
 };
 
 export default async function PropertiesPage() {

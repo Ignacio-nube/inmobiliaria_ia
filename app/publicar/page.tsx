@@ -3,6 +3,9 @@ import { PublishForm } from '@/components/properties/PublishForm';
 export const metadata = {
     title: 'Publicar Propiedad',
     description: 'Publica tu propiedad en venta o alquiler en Ignacio Propiedades.',
+    alternates: {
+        canonical: 'https://ignacio.cloud/publicar',
+    }
 };
 
 export default function PublishPage() {

@@ -7,6 +7,9 @@ import { createClient } from '@/lib/supabase/server';
 export const metadata: Metadata = {
     title: 'Contacto',
     description: 'Comunicate con Ignacio Propiedades. Estamos aquí para ayudarte a encontrar o vender tu hogar en Tucumán.',
+    alternates: {
+        canonical: 'https://ignacio.cloud/contacto',
+    }
 };
 
 export default async function ContactoPage() {

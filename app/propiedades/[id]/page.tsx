@@ -25,6 +25,9 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
     return {
         title: `${property.title} | ${property.property_type} en ${property.location}`,
         description: `${property.property_type} en ${property.location} - ${property.currency} ${property.price?.toLocaleString()}. ${property.description?.substring(0, 120)}...`,
+        alternates: {
+            canonical: `https://ignacio.cloud/propiedades/${id}`,
+        }
     };
 }
 
