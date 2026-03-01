@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import OpenAI from 'openai';
+import { CITIES } from '@/lib/locations';
 
 const openai = new OpenAI({
     apiKey: process.env.OPENAI_API_KEY,
@@ -20,6 +21,7 @@ export async function POST(req: Request) {
                 minBedrooms: 'any',
                 priceRange: 'all',
                 operationType: 'all',
+                city: '',
                 neighborhood: '',
             });
         }
@@ -31,6 +33,7 @@ Analizá esta búsqueda del usuario: "${query}"
 IMPORTANTE SOBRE BÚSQUEDAS:
 - Los usuarios suelen escribir con errores ortográficos, sin tildes, o de forma coloquial (ej: "yerva wena" -> "Yerba Buena", "picina" -> "pileta", "caza" -> "Casa").
 - Intentá interpretar correctamente lo que buscan. Si mencionan algo específico que no es un tipo de propiedad estándar (ej: "departamento con asador y picina"), extraé "asador pileta" como searchTerm.
+- Las ciudades permitidas son: ${CITIES.join(', ')}. Si el usuario menciona alguna variante coloquial (ej: "talitas", "centro", "san miguel"), mapealos a la ciudad oficial correcta ("Las Talitas", "San Miguel de Tucumán", etc.).
 
 Extraé los siguientes parámetros en formato JSON estricto:
 - "searchTerm": Texto libre clave para buscar en títulos, descripciones o amenidades (ej: "pileta", "vista", "asador", "jardin"). Si no hay, string vacío "". Corrige errores ortográficos si los detectas.
@@ -38,7 +41,8 @@ Extraé los siguientes parámetros en formato JSON estricto:
 - "minBedrooms": Mínimo de habitaciones (ej: "2"). Si no se especifica, "any".
 - "priceRange": Solo uno de: "all", "under50k", "50k-100k", "100k-250k", "over250k". Si no se especifica, "all".
 - "operationType": Solo uno de: "all", "venta", "alquiler", "alquiler_temporal". Si no se especifica, "all".
-- "neighborhood": Nombre del barrio si se menciona e interpretas cuál es (ej: "Yerba Buena", "Centro", "Barrio Norte"). Si no se menciona, "".
+- "city": Nombre exacto de la ciudad si se menciona y se puede inferir de la lista de permitidas. Si dice "centro" o no es claro, pon "San Miguel de Tucumán" si el contexto parece ser la capital. Si no se puede inferir nada geográfico, string vacío "".
+- "neighborhood": Nombre del barrio si se menciona (ej: "Barrio Norte", "Barrio Sur", "Cerro de las Rosas"). No confundir con la ciudad. Si no se menciona un barrio específico, "".
 
 IMPORTANTE: Devolvé ÚNICAMENTE un JSON válido, sin delimitadores \`\`\`json ni texto adicional.
 `;
@@ -66,6 +70,7 @@ IMPORTANTE: Devolvé ÚNICAMENTE un JSON válido, sin delimitadores \`\`\`json n
                 minBedrooms: 'any',
                 priceRange: 'all',
                 operationType: 'all',
+                city: '',
                 neighborhood: '',
             };
         }

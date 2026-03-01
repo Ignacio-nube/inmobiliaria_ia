@@ -71,6 +71,7 @@ export function PropertiesClient({ initialProperties, cardStyle }: PropertiesCli
 
     // Advanced filters
     const [showAdvanced, setShowAdvanced] = useState(false);
+    const [city, setCity] = useState('');
     const [neighborhood, setNeighborhood] = useState('');
     const [minBathrooms, setMinBathrooms] = useState('any');
     const [minGarage, setMinGarage] = useState('any');
@@ -100,6 +101,13 @@ export function PropertiesClient({ initialProperties, cardStyle }: PropertiesCli
         return Array.from(set).sort();
     }, [initialProperties]);
 
+    // Gather unique cities
+    const cities = useMemo(() => {
+        const set = new Set<string>();
+        initialProperties.forEach(p => { if (p.city) set.add(p.city); });
+        return Array.from(set).sort();
+    }, [initialProperties]);
+
     // Gather unique amenities
     const allAmenities = useMemo(() => {
         const set = new Set<string>();
@@ -114,6 +122,7 @@ export function PropertiesClient({ initialProperties, cardStyle }: PropertiesCli
         if (propertyType !== 'all') count++;
         if (priceRange !== 'all') count++;
         if (minBedrooms !== 'any') count++;
+        if (city) count++;
         if (neighborhood) count++;
         if (minBathrooms !== 'any') count++;
         if (minGarage !== 'any') count++;
@@ -123,12 +132,21 @@ export function PropertiesClient({ initialProperties, cardStyle }: PropertiesCli
         if (selectedAmenities.length > 0) count++;
         if (aiSearchTerm) count++;
         return count;
-    }, [operationType, propertyType, priceRange, minBedrooms, neighborhood, minBathrooms, minGarage, minArea, maxArea, condition, selectedAmenities, aiSearchTerm]);
+    }, [operationType, propertyType, priceRange, minBedrooms, city, neighborhood, minBathrooms, minGarage, minArea, maxArea, condition, selectedAmenities, aiSearchTerm]);
 
     // AI Search handler
     const handleAiSearch = useCallback(async () => {
         if (!aiQuery.trim()) return;
         setIsAiSearching(true);
+
+        // Reset old filters before applying new ones to avoid stacking
+        setAiSearchTerm('');
+        setPropertyType('all');
+        setMinBedrooms('any');
+        setPriceRange('all');
+        setOperationType('all');
+        setCity('');
+        setNeighborhood('');
 
         try {
             const res = await fetch('/api/ai-search', {
@@ -144,6 +162,7 @@ export function PropertiesClient({ initialProperties, cardStyle }: PropertiesCli
             if (data.minBedrooms && data.minBedrooms !== 'any') setMinBedrooms(data.minBedrooms);
             if (data.priceRange && data.priceRange !== 'all') setPriceRange(data.priceRange);
             if (data.operationType && data.operationType !== 'all') setOperationType(data.operationType);
+            if (data.city) setCity(data.city);
             if (data.neighborhood) setNeighborhood(data.neighborhood);
 
             // Log search
@@ -175,6 +194,7 @@ export function PropertiesClient({ initialProperties, cardStyle }: PropertiesCli
         setPropertyType('all');
         setPriceRange('all');
         setMinBedrooms('any');
+        setCity('');
         setNeighborhood('');
         setMinBathrooms('any');
         setMinGarage('any');
@@ -234,6 +254,9 @@ export function PropertiesClient({ initialProperties, cardStyle }: PropertiesCli
             // Bedrooms
             if (minBedrooms !== 'any' && (property.bedrooms === null || property.bedrooms < parseInt(minBedrooms))) return false;
 
+            // City
+            if (city && property.city !== city) return false;
+
             // Neighborhood
             if (neighborhood && property.neighborhood !== neighborhood) return false;
 
@@ -258,7 +281,7 @@ export function PropertiesClient({ initialProperties, cardStyle }: PropertiesCli
 
             return true;
         });
-    }, [initialProperties, aiSearchTerm, operationType, propertyType, priceRange, minBedrooms, neighborhood, minBathrooms, minGarage, minArea, maxArea, condition, selectedAmenities]);
+    }, [initialProperties, aiSearchTerm, operationType, propertyType, priceRange, minBedrooms, city, neighborhood, minBathrooms, minGarage, minArea, maxArea, condition, selectedAmenities]);
 
     const toggleAmenity = (amenity: string) => {
         setSelectedAmenities(prev =>
@@ -322,6 +345,21 @@ export function PropertiesClient({ initialProperties, cardStyle }: PropertiesCli
                         className="overflow-hidden mb-6"
                     >
                         <div className="bg-card border border-border rounded-2xl p-6 grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
+                            {/* City */}
+                            <div>
+                                <label className="text-xs font-medium text-muted-foreground mb-1.5 flex items-center gap-1">
+                                    <Building2 className="w-3 h-3" /> Ciudad
+                                </label>
+                                <select
+                                    value={city}
+                                    onChange={e => setCity(e.target.value)}
+                                    className="w-full bg-background border border-border rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-brand outline-none"
+                                >
+                                    <option value="">Todas</option>
+                                    {cities.map(c => <option key={c} value={c}>{c}</option>)}
+                                </select>
+                            </div>
+
                             {/* Neighborhood */}
                             <div>
                                 <label className="text-xs font-medium text-muted-foreground mb-1.5 flex items-center gap-1">
