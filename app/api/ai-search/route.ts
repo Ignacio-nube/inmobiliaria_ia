@@ -19,6 +19,12 @@ export async function POST(req: Request) {
                 searchTerm: query,
                 propertyType: 'all',
                 minBedrooms: 'any',
+                minBathrooms: 'any',
+                minGarage: 'any',
+                minArea: '',
+                maxArea: '',
+                condition: 'all',
+                amenities: [],
                 priceRange: 'all',
                 operationType: 'all',
                 city: '',
@@ -36,13 +42,19 @@ IMPORTANTE SOBRE BÚSQUEDAS:
 - Las ciudades permitidas son: ${CITIES.join(', ')}. Si el usuario menciona alguna variante coloquial (ej: "talitas", "centro", "san miguel"), mapealos a la ciudad oficial correcta ("Las Talitas", "San Miguel de Tucumán", etc.).
 
 Extraé los siguientes parámetros en formato JSON estricto:
-- "searchTerm": Texto libre clave para buscar en títulos, descripciones o amenidades (ej: "pileta", "vista", "asador", "jardin"). Si no hay, string vacío "". Corrige errores ortográficos si los detectas.
-- "propertyType": Solo uno de: "all", "Casa", "Departamento", "Terreno", "Local", "Oficina", "Duplex". Si no se especifica explícitamente, "all".
-- "minBedrooms": Mínimo de habitaciones (ej: "2"). Si no se especifica, "any".
+- "searchTerm": Texto clave libre. Usalo SIEMPRE para cosas que no encajen en filtros (ej: "lujoso", "amoblado", "excelente estado"). Si todo el texto es un filtro, string vacío "". Corrige errores ortográficos si los detectas.
+- "propertyType": Solo uno de: "all", "Casa", "Departamento", "Terreno", "Local", "Oficina", "Duplex". Si no se especifica, "all".
+- "minBedrooms": Mínimo de habitaciones/dormitorios (ej: "2"). Si no se especifica, "any".
+- "minBathrooms": Mínimo de baños (ej: "2"). Si no se especifica, "any".
+- "minGarage": Mínimo de cocheras/autos (ej: "1"). Si no se especifica, "any".
+- "minArea": Mínimo de metros cuadrados (ej: "100" si dice "mas de 100m"). Si no se especifica, "".
+- "maxArea": Máximo de metros cuadrados (ej: "200" si dice "hasta 200m2"). Si no se especifica, "".
+- "condition": Estado de la propiedad. Mapear a: "nuevo" (a estrenar, nuevo), "bueno" (excelente, reciclado), o "a_refaccionar" (para refaccionar, destruir). Si no se especifica, "all".
+- "amenities": Array de strings con amenidades seleccionables. Opciones válidas: "pileta", "quincho", "parrilla", "seguridad", "ascensor", "jardin", "cochera_cubierta", "vestidor", "deposito", "vidriera", "alta_visibilidad", "vista_panoramica", "servicios_completos", "lavadero", "terraza", "calefaccion". Si piden "piscina" -> "pileta", si piden "asador" -> "parrilla". Si no hay amenidades, array vacío [].
 - "priceRange": Solo uno de: "all", "under50k", "50k-100k", "100k-250k", "over250k". Si no se especifica, "all".
 - "operationType": Solo uno de: "all", "venta", "alquiler", "alquiler_temporal". Si no se especifica, "all".
-- "city": Nombre exacto de la ciudad si se menciona y se puede inferir de la lista de permitidas. Si dice "centro" o no es claro, pon "San Miguel de Tucumán" si el contexto parece ser la capital. Si no se puede inferir nada geográfico, string vacío "".
-- "neighborhood": Nombre del barrio si se menciona (ej: "Barrio Norte", "Barrio Sur", "Cerro de las Rosas"). No confundir con la ciudad. Si no se menciona un barrio específico, "".
+- "city": Nombre exacto de la ciudad de la lista permitida. Si dicen "centro", usar "San Miguel de Tucumán". Si no se indica, "".
+- "neighborhood": Nombre del barrio si se menciona (ej: "Barrio Norte"). Si no, "".
 
 IMPORTANTE: Devolvé ÚNICAMENTE un JSON válido, sin delimitadores \`\`\`json ni texto adicional.
 `;
@@ -68,6 +80,12 @@ IMPORTANTE: Devolvé ÚNICAMENTE un JSON válido, sin delimitadores \`\`\`json n
                 searchTerm: query,
                 propertyType: 'all',
                 minBedrooms: 'any',
+                minBathrooms: 'any',
+                minGarage: 'any',
+                minArea: '',
+                maxArea: '',
+                condition: 'all',
+                amenities: [],
                 priceRange: 'all',
                 operationType: 'all',
                 city: '',

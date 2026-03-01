@@ -147,6 +147,12 @@ export function PropertiesClient({ initialProperties, cardStyle }: PropertiesCli
         setOperationType('all');
         setCity('');
         setNeighborhood('');
+        setMinBathrooms('any');
+        setMinGarage('any');
+        setMinArea('');
+        setMaxArea('');
+        setCondition('all');
+        setSelectedAmenities([]);
 
         try {
             const res = await fetch('/api/ai-search', {
@@ -160,6 +166,16 @@ export function PropertiesClient({ initialProperties, cardStyle }: PropertiesCli
             if (data.searchTerm) setAiSearchTerm(data.searchTerm);
             if (data.propertyType && data.propertyType !== 'all') setPropertyType(data.propertyType);
             if (data.minBedrooms && data.minBedrooms !== 'any') setMinBedrooms(data.minBedrooms);
+            if (data.minBathrooms && data.minBathrooms !== 'any') setMinBathrooms(data.minBathrooms);
+            if (data.minGarage && data.minGarage !== 'any') setMinGarage(data.minGarage);
+            if (data.minArea) setMinArea(data.minArea);
+            if (data.maxArea) setMaxArea(data.maxArea);
+            if (data.condition && data.condition !== 'all') setCondition(data.condition);
+            if (data.amenities && Array.isArray(data.amenities)) {
+                // Filter only valid amenities that exist in allAmenities to prevent garbage UI
+                const validAmenities = data.amenities.filter((a: string) => allAmenities.includes(a));
+                if (validAmenities.length > 0) setSelectedAmenities(validAmenities);
+            }
             if (data.priceRange && data.priceRange !== 'all') setPriceRange(data.priceRange);
             if (data.operationType && data.operationType !== 'all') setOperationType(data.operationType);
             if (data.city) setCity(data.city);
