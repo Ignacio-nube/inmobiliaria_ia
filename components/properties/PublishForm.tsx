@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import Image from "next/image";
 import { PublishAssistantBot } from "./PublishAssistantBot";
+import { CITIES, PROVINCES } from "@/lib/locations";
 
 type PropertyInsert = Database['public']['Tables']['properties']['Insert'];
 
@@ -120,7 +121,19 @@ export function PublishForm({ initialData, isAdminEdit = false }: PublishFormPro
     };
 
     const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
-        setFormData({ ...formData, [e.target.name]: e.target.value });
+        const { name, value } = e.target;
+        setFormData(prev => {
+            const nextData = { ...prev, [name]: value };
+
+            // Auto-update location if city or province changes
+            if (name === 'city' || name === 'province') {
+                const city = name === 'city' ? value : nextData.city;
+                const province = name === 'province' ? value : nextData.province;
+                nextData.location = `${city}, ${province}`;
+            }
+
+            return nextData;
+        });
     };
 
     const handleSubmit = async (e: React.FormEvent) => {
@@ -317,14 +330,16 @@ export function PublishForm({ initialData, isAdminEdit = false }: PublishFormPro
             <FormSection icon={<MapPin className="w-5 h-5" />} title="Ubicación">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
-                        <FieldLabel required>Zona / Localidad</FieldLabel>
-                        <input name="location" value={formData.location} onChange={handleChange} required
-                            placeholder="Yerba Buena, Tucumán" className={inputCls} />
+                        <FieldLabel required>Ciudad</FieldLabel>
+                        <select name="city" value={formData.city} onChange={handleChange} required className={selectCls}>
+                            {CITIES.map(c => <option key={c} value={c}>{c}</option>)}
+                        </select>
                     </div>
                     <div>
-                        <FieldLabel>Dirección</FieldLabel>
-                        <input name="address" value={formData.address} onChange={handleChange}
-                            placeholder="Av. Aconquija 1200" className={inputCls} />
+                        <FieldLabel required>Provincia</FieldLabel>
+                        <select name="province" value={formData.province} onChange={handleChange} required className={selectCls}>
+                            {PROVINCES.map(p => <option key={p} value={p}>{p}</option>)}
+                        </select>
                     </div>
                     <div>
                         <FieldLabel>Barrio / Country</FieldLabel>
@@ -332,8 +347,13 @@ export function PublishForm({ initialData, isAdminEdit = false }: PublishFormPro
                             placeholder="Country Los Cerros" className={inputCls} />
                     </div>
                     <div>
-                        <FieldLabel>Ciudad</FieldLabel>
-                        <input name="city" value={formData.city} onChange={handleChange} className={inputCls} />
+                        <FieldLabel>Dirección</FieldLabel>
+                        <input name="address" value={formData.address} onChange={handleChange}
+                            placeholder="Av. Aconquija 1200" className={inputCls} />
+                    </div>
+                    <div className="md:col-span-2 hidden">
+                        <FieldLabel>Zona / Localidad</FieldLabel>
+                        <input name="location" value={formData.location} readOnly tabIndex={-1} className={`${inputCls} bg-muted opacity-60`} />
                     </div>
                 </div>
 
