@@ -1,6 +1,7 @@
 "use client";
 
-import { motion } from "framer-motion";
+import { useEffect, useRef } from "react";
+import { motion, useMotionValue, useTransform, animate } from "framer-motion";
 import { Clock, CheckCircle, MessageSquare, ImageOff, TrendingUp, Eye } from "lucide-react";
 
 interface StatsData {
@@ -9,7 +10,7 @@ interface StatsData {
     unreadMessages: number;
     withoutImages: number;
     totalViews: number;
-    viewsTrend: number; // percentage change
+    viewsTrend: number;
 }
 
 const container = {
@@ -25,6 +26,22 @@ const item = {
     show: { opacity: 1, y: 0, scale: 1 }
 };
 
+function AnimatedCounter({ value }: { value: number }) {
+    const count = useMotionValue(0);
+    const rounded = useTransform(count, (latest) => Math.round(latest).toLocaleString());
+    const ref = useRef<HTMLSpanElement>(null);
+
+    useEffect(() => {
+        const controls = animate(count, value, {
+            duration: 1.2,
+            ease: [0.25, 0.46, 0.45, 0.94],
+        });
+        return controls.stop;
+    }, [count, value]);
+
+    return <motion.span ref={ref}>{rounded}</motion.span>;
+}
+
 export function DashboardStats({ stats }: { stats: StatsData }) {
     const cards = [
         {
@@ -33,7 +50,9 @@ export function DashboardStats({ stats }: { stats: StatsData }) {
             icon: Clock,
             gradient: "from-amber-500/10 to-orange-500/10",
             iconColor: "text-amber-400",
-            href: "/admin/propiedades?status=pending"
+            glowColor: "hover:shadow-amber-500/20",
+            borderGlow: "hover:border-amber-500/30",
+            href: "#approval-queue"
         },
         {
             label: "Publicadas",
@@ -41,6 +60,8 @@ export function DashboardStats({ stats }: { stats: StatsData }) {
             icon: CheckCircle,
             gradient: "from-emerald-500/10 to-green-500/10",
             iconColor: "text-emerald-400",
+            glowColor: "hover:shadow-emerald-500/20",
+            borderGlow: "hover:border-emerald-500/30",
             href: "/admin/propiedades?status=approved"
         },
         {
@@ -49,6 +70,8 @@ export function DashboardStats({ stats }: { stats: StatsData }) {
             icon: MessageSquare,
             gradient: "from-blue-500/10 to-indigo-500/10",
             iconColor: "text-blue-400",
+            glowColor: "hover:shadow-blue-500/20",
+            borderGlow: "hover:border-blue-500/30",
             href: "/admin/mensajes"
         },
         {
@@ -57,14 +80,18 @@ export function DashboardStats({ stats }: { stats: StatsData }) {
             icon: ImageOff,
             gradient: "from-red-500/10 to-rose-500/10",
             iconColor: "text-red-400",
+            glowColor: "hover:shadow-red-500/20",
+            borderGlow: "hover:border-red-500/30",
             href: "/admin/propiedades"
         },
         {
-            label: "Visitas Totales (7d)",
+            label: "Visitas (7d)",
             value: stats.totalViews,
             icon: Eye,
             gradient: "from-violet-500/10 to-purple-500/10",
             iconColor: "text-violet-400",
+            glowColor: "hover:shadow-violet-500/20",
+            borderGlow: "hover:border-violet-500/30",
             suffix: stats.viewsTrend > 0 ? `+${stats.viewsTrend}%` : `${stats.viewsTrend}%`,
             suffixIcon: TrendingUp,
             suffixColor: stats.viewsTrend >= 0 ? "text-emerald-400" : "text-red-400"
@@ -76,7 +103,7 @@ export function DashboardStats({ stats }: { stats: StatsData }) {
             variants={container}
             initial="hidden"
             animate="show"
-            className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4"
+            className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-3"
         >
             {cards.map((card) => (
                 <motion.a
@@ -84,11 +111,11 @@ export function DashboardStats({ stats }: { stats: StatsData }) {
                     href={card.href || "#"}
                     variants={item}
                     whileHover={{ y: -4, transition: { type: "spring", stiffness: 400, damping: 25 } }}
-                    className={`relative overflow-hidden bg-gradient-to-br ${card.gradient} rounded-2xl p-5 group cursor-pointer`}
+                    className={`relative overflow-hidden bg-gradient-to-br ${card.gradient} rounded-2xl p-4 group cursor-pointer border border-transparent ${card.borderGlow} transition-all duration-300 shadow-lg shadow-transparent ${card.glowColor}`}
                 >
-                    <div className="flex items-start justify-between mb-4">
-                        <div className={`p-2.5 rounded-xl bg-slate-800/50 ${card.iconColor}`}>
-                            <card.icon className="w-5 h-5" />
+                    <div className="flex items-start justify-between mb-3">
+                        <div className={`p-2 rounded-xl bg-slate-800/50 ${card.iconColor}`}>
+                            <card.icon className="w-4 h-4" />
                         </div>
                         {card.suffix && (
                             <span className={`text-xs font-semibold flex items-center gap-1 ${card.suffixColor}`}>
@@ -97,10 +124,10 @@ export function DashboardStats({ stats }: { stats: StatsData }) {
                             </span>
                         )}
                     </div>
-                    <div className="text-3xl font-bold text-white mb-1 tracking-tight">
-                        {card.value.toLocaleString()}
+                    <div className="text-2xl font-bold text-white mb-0.5 tracking-tight">
+                        <AnimatedCounter value={card.value} />
                     </div>
-                    <div className="text-xs text-slate-400 font-medium">
+                    <div className="text-[11px] text-slate-400 font-medium">
                         {card.label}
                     </div>
                 </motion.a>

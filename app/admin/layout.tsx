@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { AdminSidebar } from "@/components/admin/AdminSidebar";
+import { ToastProvider } from "@/components/ui/ToastProvider";
 
 export const metadata = {
     title: "Admin Panel | Ignacio Propiedades",
@@ -32,6 +33,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
                     </div>
                 </div>
             </main>
+            <ToastProvider />
         </div>
     );
 }

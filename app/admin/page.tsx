@@ -8,12 +8,10 @@ export const revalidate = 0;
 export default async function AdminDashboardPage() {
     const supabase = await createClient();
 
-    // Ensure purity by caching the dates once outside the effect/render or using variables
     const now = Date.now();
     const sevenDaysAgo = new Date(now - 7 * 24 * 60 * 60 * 1000).toISOString();
     const fourteenDaysAgo = new Date(now - 14 * 24 * 60 * 60 * 1000).toISOString();
 
-    // Parallel data fetching — only what the server needs
     const [
         allPropertiesRes,
         pendingPropertiesRes,
@@ -34,7 +32,6 @@ export default async function AdminDashboardPage() {
     const allProperties = allPropertiesRes.data || [];
     const pendingProperties = pendingPropertiesRes.data || [];
 
-    // Compute KPI stats
     const publishedCount = allProperties.filter(p => p.published && p.approval_status === 'approved').length;
     const withoutImages = allProperties.filter(p => !p.images || p.images.length === 0).length;
     const pendingApproval = allProperties.filter(p => p.approval_status === 'pending').length;
@@ -45,9 +42,9 @@ export default async function AdminDashboardPage() {
         : 0;
 
     return (
-        <div className="space-y-10">
+        <div className="flex flex-col h-[calc(100vh-64px)] overflow-hidden">
             {/* Header */}
-            <div>
+            <div className="flex-shrink-0 mb-4">
                 <h1 className="text-3xl font-bold text-white tracking-tight mb-1">
                     Dashboard
                 </h1>
@@ -57,32 +54,38 @@ export default async function AdminDashboardPage() {
             </div>
 
             {/* KPI Cards */}
-            <DashboardStats stats={{
-                pendingApproval,
-                publishedCount,
-                unreadMessages: unreadMessagesRes.count || 0,
-                withoutImages,
-                totalViews: totalViews7d,
-                viewsTrend,
-            }} />
+            <div className="flex-shrink-0 mb-4">
+                <DashboardStats stats={{
+                    pendingApproval,
+                    publishedCount,
+                    unreadMessages: unreadMessagesRes.count || 0,
+                    withoutImages,
+                    totalViews: totalViews7d,
+                    viewsTrend,
+                }} />
+            </div>
 
-            {/* Main Grid */}
-            <div className="grid grid-cols-1 xl:grid-cols-5 gap-8">
+            {/* Main Grid — fixed height, independent scrolling */}
+            <div className="flex-1 grid grid-cols-1 xl:grid-cols-[2fr_3fr] gap-6 min-h-0">
                 {/* Approval Queue */}
-                <div className="xl:col-span-2">
-                    <div className="flex items-center justify-between mb-4">
-                        <h2 className="text-lg font-semibold text-slate-200">Cola de Aprobación</h2>
+                <div className="flex flex-col min-h-0" id="approval-queue">
+                    <div className="flex items-center justify-between mb-3 flex-shrink-0">
+                        <h2 className="text-base font-semibold text-slate-200">Cola de Aprobación</h2>
                         <span className="text-xs text-slate-500">{pendingProperties.length} pendientes</span>
                     </div>
-                    <ApprovalQueue properties={pendingProperties} />
+                    <div className="flex-1 overflow-y-auto min-h-0 pr-1">
+                        <ApprovalQueue properties={pendingProperties} />
+                    </div>
                 </div>
 
-                {/* Analytics — self-fetching component */}
-                <div className="xl:col-span-3">
-                    <div className="mb-4">
-                        <h2 className="text-lg font-semibold text-slate-200">Analytics</h2>
+                {/* Analytics — independent scroll */}
+                <div className="flex flex-col min-h-0">
+                    <div className="mb-3 flex-shrink-0">
+                        <h2 className="text-base font-semibold text-slate-200">Analytics</h2>
                     </div>
-                    <AnalyticsPanel />
+                    <div className="flex-1 overflow-y-auto min-h-0 pr-1">
+                        <AnalyticsPanel totalMessages={unreadMessagesRes.count || 0} />
+                    </div>
                 </div>
             </div>
         </div>

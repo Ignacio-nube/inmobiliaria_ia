@@ -66,12 +66,25 @@ export function HomeContent({ properties, heroTitle, heroSubtitle, cardStyle, he
             });
             const data = await res.json();
 
-            // Build query params
+            // Build query params matching the new server-side filter system
             const params = new URLSearchParams();
             if (data.searchTerm) params.set('q', data.searchTerm);
-            if (data.propertyType && data.propertyType !== 'all') params.set('type', data.propertyType);
-            if (data.minBedrooms && data.minBedrooms !== 'any') params.set('beds', data.minBedrooms);
-            if (data.priceRange && data.priceRange !== 'all') params.set('price', data.priceRange);
+            if (data.propertyType && data.propertyType !== 'all') params.set('tipo', data.propertyType);
+            if (data.operationType && data.operationType !== 'all') params.set('operacion', data.operationType);
+            if (data.minBedrooms && data.minBedrooms !== 'any') params.set('dormitorios', data.minBedrooms);
+            if (data.minBathrooms && data.minBathrooms !== 'any') params.set('banos', data.minBathrooms);
+            if (data.minGarage && data.minGarage !== 'any') params.set('cocheras', data.minGarage);
+            if (data.minArea) params.set('supMin', data.minArea);
+            if (data.maxArea) params.set('supMax', data.maxArea);
+            if (data.condition && data.condition !== 'all') params.set('estado', data.condition);
+            if (data.city) params.set('ciudad', data.city);
+            if (data.neighborhood) params.set('barrio', data.neighborhood);
+            if (data.precioMin !== null && data.precioMin !== undefined) params.set('precioMin', String(data.precioMin));
+            if (data.precioMax !== null && data.precioMax !== undefined) params.set('precioMax', String(data.precioMax));
+            if (data.moneda) params.set('moneda', data.moneda);
+            if (data.amenities && Array.isArray(data.amenities) && data.amenities.length > 0) {
+                params.set('amenities', data.amenities.join(','));
+            }
 
             router.push(`/propiedades?${params.toString()}`);
         } catch (error) {

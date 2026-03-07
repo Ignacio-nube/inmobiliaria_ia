@@ -1,17 +1,17 @@
 "use client";
 
-import { useState, useMemo, useEffect, useCallback } from 'react';
-import { useSearchParams } from 'next/navigation';
+import { useState, useMemo, useEffect, useCallback, useTransition } from 'react';
+import { useSearchParams, useRouter, usePathname } from 'next/navigation';
 import { PropertyCard } from '@/components/ui/PropertyCard';
 import { Database } from '@/lib/database.types';
 import {
     Search, SlidersHorizontal, Sparkles, X, ChevronDown, ChevronUp,
-    Building2, Wallet, Bed, Bath, Car, MapPin, Ruler, Tag, Loader2
+    Building2, Wallet, Bed, Bath, Car, MapPin, Ruler, Tag, Loader2,
+    ChevronLeft, ChevronRight, AlertTriangle
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { createPortal } from 'react-dom';
 import { useTypingPlaceholder } from '@/hooks/useTypingPlaceholder';
-import Fuse from 'fuse.js';
 
 // Typing placeholders for AI Search
 const SEARCH_PLACEHOLDERS = [
@@ -26,6 +26,9 @@ type Property = Database['public']['Tables']['properties']['Row'];
 
 interface PropertiesClientProps {
     initialProperties: Property[];
+    initialTotal: number;
+    initialRelaxed: boolean;
+    initialRelaxedMessage?: string;
     cardStyle: string;
 }
 
@@ -45,13 +48,6 @@ const TYPE_OPTIONS = [
     { value: 'Oficina', label: 'Oficina' },
     { value: 'Duplex', label: 'Duplex' },
 ];
-const PRICE_OPTIONS = [
-    { value: 'all', label: 'Precio' },
-    { value: 'under50k', label: '< USD 50k' },
-    { value: '50k-100k', label: '50k - 100k' },
-    { value: '100k-250k', label: '100k - 250k' },
-    { value: 'over250k', label: '> USD 250k' },
-];
 const BEDROOMS_OPTIONS = [
     { value: 'any', label: 'Dorm.' },
     { value: '1', label: '1+' },
@@ -60,30 +56,58 @@ const BEDROOMS_OPTIONS = [
     { value: '4', label: '4+' },
 ];
 
-export function PropertiesClient({ initialProperties, cardStyle }: PropertiesClientProps) {
+const AMENITIES_LIST = [
+    "pileta", "quincho", "parrilla", "seguridad", "ascensor", "jardin",
+    "cochera_cubierta", "vestidor", "deposito", "vidriera", "alta_visibilidad",
+    "vista_panoramica", "servicios_completos", "lavadero", "terraza", "calefaccion"
+];
+
+const PAGE_SIZE = 20;
+
+export function PropertiesClient({
+    initialProperties,
+    initialTotal,
+    initialRelaxed,
+    initialRelaxedMessage,
+    cardStyle
+}: PropertiesClientProps) {
+    const router = useRouter();
+    const pathname = usePathname();
     const searchParams = useSearchParams();
+    const [isPending, startTransition] = useTransition();
 
-    // Primary filters
-    const [operationType, setOperationType] = useState(searchParams.get('op') || 'all');
-    const [propertyType, setPropertyType] = useState(searchParams.get('type') || 'all');
-    const [priceRange, setPriceRange] = useState(searchParams.get('price') || 'all');
-    const [minBedrooms, setMinBedrooms] = useState(searchParams.get('beds') || 'any');
+    // ── State derived from URL params ──
+    const operationType = searchParams.get('operacion') || 'all';
+    const propertyType = searchParams.get('tipo') || 'all';
+    const minBedrooms = searchParams.get('dormitorios') || 'any';
+    const city = searchParams.get('ciudad') || '';
+    const neighborhood = searchParams.get('barrio') || '';
+    const minBathrooms = searchParams.get('banos') || 'any';
+    const minGarage = searchParams.get('cocheras') || 'any';
+    const minArea = searchParams.get('supMin') || '';
+    const maxArea = searchParams.get('supMax') || '';
+    const condition = searchParams.get('estado') || 'all';
+    const precioMin = searchParams.get('precioMin') || '';
+    const precioMax = searchParams.get('precioMax') || '';
+    const moneda = searchParams.get('moneda') || '';
+    const amenitiesParam = searchParams.get('amenities') || '';
+    const selectedAmenities = amenitiesParam ? amenitiesParam.split(',').filter(Boolean) : [];
+    const searchTerm = searchParams.get('q') || '';
+    const currentPage = parseInt(searchParams.get('page') || '1');
 
-    // Advanced filters
-    const [showAdvanced, setShowAdvanced] = useState(false);
-    const [city, setCity] = useState('');
-    const [neighborhood, setNeighborhood] = useState('');
-    const [minBathrooms, setMinBathrooms] = useState('any');
-    const [minGarage, setMinGarage] = useState('any');
-    const [minArea, setMinArea] = useState('');
-    const [maxArea, setMaxArea] = useState('');
-    const [condition, setCondition] = useState('all');
-    const [selectedAmenities, setSelectedAmenities] = useState<string[]>([]);
+    // ── Properties data from server ──
+    const [properties, setProperties] = useState<Property[]>(initialProperties);
+    const [total, setTotal] = useState(initialTotal);
+    const [relaxed, setRelaxed] = useState(initialRelaxed);
+    const [relaxedMessage, setRelaxedMessage] = useState(initialRelaxedMessage);
+    const [isLoading, setIsLoading] = useState(false);
 
-    // AI Search
+    // ── AI Search state ──
     const [aiQuery, setAiQuery] = useState('');
-    const [aiSearchTerm, setAiSearchTerm] = useState('');
     const [isAiSearching, setIsAiSearching] = useState(false);
+
+    // Advanced filters panel
+    const [showAdvanced, setShowAdvanced] = useState(false);
 
     // Typing Placeholder Hook
     const { placeholder } = useTypingPlaceholder(SEARCH_PLACEHOLDERS);
@@ -94,33 +118,65 @@ export function PropertiesClient({ initialProperties, cardStyle }: PropertiesCli
         setMounted(true);
     }, []);
 
-    // Gather unique neighborhoods
-    const neighborhoods = useMemo(() => {
-        const set = new Set<string>();
-        initialProperties.forEach(p => { if (p.neighborhood) set.add(p.neighborhood); });
-        return Array.from(set).sort();
-    }, [initialProperties]);
+    // ── Helper: update URL params ──
+    const updateParams = useCallback((updates: Record<string, string>) => {
+        const params = new URLSearchParams(searchParams.toString());
 
-    // Gather unique cities
-    const cities = useMemo(() => {
-        const set = new Set<string>();
-        initialProperties.forEach(p => { if (p.city) set.add(p.city); });
-        return Array.from(set).sort();
-    }, [initialProperties]);
+        // Apply updates
+        for (const [key, value] of Object.entries(updates)) {
+            if (value === '' || value === 'all' || value === 'any') {
+                params.delete(key);
+            } else {
+                params.set(key, value);
+            }
+        }
 
-    // Gather unique amenities
-    const allAmenities = useMemo(() => {
-        const set = new Set<string>();
-        initialProperties.forEach(p => { p.amenities?.forEach(a => set.add(a)); });
-        return Array.from(set).sort();
-    }, [initialProperties]);
+        // Always reset to page 1 when filters change (unless page itself is being set)
+        if (!('page' in updates)) {
+            params.delete('page');
+        }
 
-    // Count active filters
+        const queryString = params.toString();
+        const newUrl = queryString ? `${pathname}?${queryString}` : pathname;
+
+        startTransition(() => {
+            router.push(newUrl, { scroll: false });
+        });
+    }, [searchParams, pathname, router]);
+
+    // ── Fetch from API when URL params change ──
+    const paramsString = searchParams.toString();
+
+    useEffect(() => {
+        // Skip fetch on initial mount — we already have SSR data
+        const isInitialMount = properties === initialProperties && paramsString === '';
+        if (isInitialMount && initialProperties.length > 0) return;
+
+        const fetchProperties = async () => {
+            setIsLoading(true);
+            try {
+                const res = await fetch(`/api/properties?${paramsString}`);
+                const data = await res.json();
+                setProperties(data.data || []);
+                setTotal(data.total || 0);
+                setRelaxed(data.relaxed || false);
+                setRelaxedMessage(data.relaxedMessage);
+            } catch (error) {
+                console.error('Failed to fetch properties:', error);
+            } finally {
+                setIsLoading(false);
+            }
+        };
+
+        fetchProperties();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [paramsString]);
+
+    // ── Count active filters ──
     const activeFilterCount = useMemo(() => {
         let count = 0;
         if (operationType !== 'all') count++;
         if (propertyType !== 'all') count++;
-        if (priceRange !== 'all') count++;
         if (minBedrooms !== 'any') count++;
         if (city) count++;
         if (neighborhood) count++;
@@ -130,29 +186,17 @@ export function PropertiesClient({ initialProperties, cardStyle }: PropertiesCli
         if (maxArea) count++;
         if (condition !== 'all') count++;
         if (selectedAmenities.length > 0) count++;
-        if (aiSearchTerm) count++;
+        if (precioMin) count++;
+        if (precioMax) count++;
+        if (moneda) count++;
+        if (searchTerm) count++;
         return count;
-    }, [operationType, propertyType, priceRange, minBedrooms, city, neighborhood, minBathrooms, minGarage, minArea, maxArea, condition, selectedAmenities, aiSearchTerm]);
+    }, [operationType, propertyType, minBedrooms, city, neighborhood, minBathrooms, minGarage, minArea, maxArea, condition, selectedAmenities, precioMin, precioMax, moneda, searchTerm]);
 
-    // AI Search handler
+    // ── AI Search handler ──
     const handleAiSearch = useCallback(async () => {
         if (!aiQuery.trim()) return;
         setIsAiSearching(true);
-
-        // Reset old filters before applying new ones to avoid stacking
-        setAiSearchTerm('');
-        setPropertyType('all');
-        setMinBedrooms('any');
-        setPriceRange('all');
-        setOperationType('all');
-        setCity('');
-        setNeighborhood('');
-        setMinBathrooms('any');
-        setMinGarage('any');
-        setMinArea('');
-        setMaxArea('');
-        setCondition('all');
-        setSelectedAmenities([]);
 
         try {
             const res = await fetch('/api/ai-search', {
@@ -162,40 +206,45 @@ export function PropertiesClient({ initialProperties, cardStyle }: PropertiesCli
             });
             const data = await res.json();
 
-            // Apply AI-parsed filters
-            if (data.searchTerm) setAiSearchTerm(data.searchTerm);
-            if (data.propertyType && data.propertyType !== 'all') setPropertyType(data.propertyType);
-            if (data.minBedrooms && data.minBedrooms !== 'any') setMinBedrooms(data.minBedrooms);
-            if (data.minBathrooms && data.minBathrooms !== 'any') setMinBathrooms(data.minBathrooms);
-            if (data.minGarage && data.minGarage !== 'any') setMinGarage(data.minGarage);
-            if (data.minArea) setMinArea(data.minArea);
-            if (data.maxArea) setMaxArea(data.maxArea);
-            if (data.condition && data.condition !== 'all') setCondition(data.condition);
-            if (data.amenities && Array.isArray(data.amenities)) {
-                // Filter only valid amenities that exist in allAmenities to prevent garbage UI
-                const validAmenities = data.amenities.filter((a: string) => allAmenities.includes(a));
-                if (validAmenities.length > 0) setSelectedAmenities(validAmenities);
-            }
-            if (data.priceRange && data.priceRange !== 'all') setPriceRange(data.priceRange);
-            if (data.operationType && data.operationType !== 'all') setOperationType(data.operationType);
-            if (data.city) setCity(data.city);
-            if (data.neighborhood) setNeighborhood(data.neighborhood);
+            // Build URL params from AI response
+            const params: Record<string, string> = {};
 
-            // Log search
-            logSearch(aiQuery, data);
+            if (data.searchTerm) params.q = data.searchTerm;
+            if (data.propertyType && data.propertyType !== 'all') params.tipo = data.propertyType;
+            if (data.operationType && data.operationType !== 'all') params.operacion = data.operationType;
+            if (data.minBedrooms && data.minBedrooms !== 'any') params.dormitorios = data.minBedrooms;
+            if (data.minBathrooms && data.minBathrooms !== 'any') params.banos = data.minBathrooms;
+            if (data.minGarage && data.minGarage !== 'any') params.cocheras = data.minGarage;
+            if (data.minArea) params.supMin = data.minArea;
+            if (data.maxArea) params.supMax = data.maxArea;
+            if (data.condition && data.condition !== 'all') params.estado = data.condition;
+            if (data.city) params.ciudad = data.city;
+            if (data.neighborhood) params.barrio = data.neighborhood;
+            if (data.precioMin !== null && data.precioMin !== undefined) params.precioMin = String(data.precioMin);
+            if (data.precioMax !== null && data.precioMax !== undefined) params.precioMax = String(data.precioMax);
+            if (data.moneda) params.moneda = data.moneda;
+            if (data.amenities && Array.isArray(data.amenities) && data.amenities.length > 0) {
+                params.amenities = data.amenities.join(',');
+            }
+
+            // Replace all URL params with AI-extracted ones
+            const newParams = new URLSearchParams();
+            for (const [key, value] of Object.entries(params)) {
+                newParams.set(key, value);
+            }
+            const queryString = newParams.toString();
+            const newUrl = queryString ? `${pathname}?${queryString}` : pathname;
+
+            startTransition(() => {
+                router.push(newUrl, { scroll: false });
+            });
         } catch {
             // Fallback: just use the text as search term
-            setAiSearchTerm(aiQuery);
+            updateParams({ q: aiQuery });
         } finally {
             setIsAiSearching(false);
         }
-    }, [aiQuery]);
-
-    const logSearch = async (query: string, filters: any) => {
-        try {
-            // TODO: implement when search_logs insert is ready via API
-        } catch { }
-    };
+    }, [aiQuery, pathname, router, updateParams]);
 
     const handleKeyDown = (e: React.KeyboardEvent) => {
         if (e.key === 'Enter') {
@@ -204,106 +253,38 @@ export function PropertiesClient({ initialProperties, cardStyle }: PropertiesCli
         }
     };
 
-    // Clear all
+    // ── Clear all ──
     const clearAll = () => {
-        setOperationType('all');
-        setPropertyType('all');
-        setPriceRange('all');
-        setMinBedrooms('any');
-        setCity('');
-        setNeighborhood('');
-        setMinBathrooms('any');
-        setMinGarage('any');
-        setMinArea('');
-        setMaxArea('');
-        setCondition('all');
-        setSelectedAmenities([]);
         setAiQuery('');
-        setAiSearchTerm('');
-    };
-
-    // Filter properties
-    const filteredProperties = useMemo(() => {
-        // Prepare fuse instance early for text search
-        let matchedIds = new Set<string>();
-
-        if (aiSearchTerm) {
-            const fuse = new Fuse(initialProperties, {
-                keys: [
-                    { name: 'title', weight: 2 },
-                    { name: 'description', weight: 1 },
-                    { name: 'neighborhood', weight: 1.5 },
-                    { name: 'address', weight: 1.5 },
-                    { name: 'city', weight: 1.2 },
-                    { name: 'amenities', weight: 1 }
-                ],
-                threshold: 0.3, // Allow a moderate amount of typos (fuzzy search)
-                ignoreLocation: true,
-                useExtendedSearch: true
-            });
-
-            const results = fuse.search(aiSearchTerm);
-            matchedIds = new Set(results.map(r => r.item.id));
-        }
-
-        return initialProperties.filter(property => {
-            // Text search
-            if (aiSearchTerm && !matchedIds.has(property.id)) {
-                return false;
-            }
-
-            // Operation
-            if (operationType !== 'all' && property.operation_type !== operationType) return false;
-
-            // Type
-            if (propertyType !== 'all' && property.property_type !== propertyType) return false;
-
-            // Price
-            if (priceRange !== 'all') {
-                const p = property.price;
-                if (priceRange === 'under50k' && p >= 50000) return false;
-                if (priceRange === '50k-100k' && (p < 50000 || p > 100000)) return false;
-                if (priceRange === '100k-250k' && (p < 100000 || p > 250000)) return false;
-                if (priceRange === 'over250k' && p <= 250000) return false;
-            }
-
-            // Bedrooms
-            if (minBedrooms !== 'any' && (property.bedrooms === null || property.bedrooms < parseInt(minBedrooms))) return false;
-
-            // City
-            if (city && property.city !== city) return false;
-
-            // Neighborhood
-            if (neighborhood && property.neighborhood !== neighborhood) return false;
-
-            // Bathrooms
-            if (minBathrooms !== 'any' && (property.bathrooms === null || property.bathrooms < parseInt(minBathrooms))) return false;
-
-            // Garage
-            if (minGarage !== 'any' && (property.garage === null || property.garage < parseInt(minGarage))) return false;
-
-            // Area
-            if (minArea && (property.square_meters === null || property.square_meters < parseInt(minArea))) return false;
-            if (maxArea && (property.square_meters === null || property.square_meters > parseInt(maxArea))) return false;
-
-            // Condition
-            if (condition !== 'all' && property.condition !== condition) return false;
-
-            // Amenities
-            if (selectedAmenities.length > 0) {
-                const propAmenities = property.amenities || [];
-                if (!selectedAmenities.every(a => propAmenities.includes(a))) return false;
-            }
-
-            return true;
+        startTransition(() => {
+            router.push(pathname, { scroll: false });
         });
-    }, [initialProperties, aiSearchTerm, operationType, propertyType, priceRange, minBedrooms, city, neighborhood, minBathrooms, minGarage, minArea, maxArea, condition, selectedAmenities]);
-
-    const toggleAmenity = (amenity: string) => {
-        setSelectedAmenities(prev =>
-            prev.includes(amenity) ? prev.filter(a => a !== amenity) : [...prev, amenity]
-        );
     };
+
+    // ── Pagination ──
+    const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+
+    const goToPage = (page: number) => {
+        if (page < 1 || page > totalPages) return;
+        updateParams({ page: String(page) });
+        // Scroll to top of results
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    };
+
+    // ── Amenity toggle ──
+    const toggleAmenity = (amenity: string) => {
+        const current = [...selectedAmenities];
+        const idx = current.indexOf(amenity);
+        if (idx >= 0) {
+            current.splice(idx, 1);
+        } else {
+            current.push(amenity);
+        }
+        updateParams({ amenities: current.join(',') });
+    };
+
+    // ── Loading overlay ──
+    const showLoading = isLoading || isPending;
 
     return (
         <div className="relative pb-28">
@@ -311,13 +292,26 @@ export function PropertiesClient({ initialProperties, cardStyle }: PropertiesCli
             <div className="flex flex-col gap-4 mb-6">
                 {/* Primary Filter Chips */}
                 <div className="flex flex-wrap gap-2 items-center">
-                    <FilterChipGroup value={operationType} onChange={setOperationType} options={OPERATION_OPTIONS} icon={<Tag className="w-3.5 h-3.5" />} />
+                    <FilterChipGroup
+                        value={operationType}
+                        onChange={(v) => updateParams({ operacion: v })}
+                        options={OPERATION_OPTIONS}
+                        icon={<Tag className="w-3.5 h-3.5" />}
+                    />
                     <span className="w-px h-6 bg-border hidden sm:block" />
-                    <FilterChipGroup value={propertyType} onChange={setPropertyType} options={TYPE_OPTIONS} icon={<Building2 className="w-3.5 h-3.5" />} />
+                    <FilterChipGroup
+                        value={propertyType}
+                        onChange={(v) => updateParams({ tipo: v })}
+                        options={TYPE_OPTIONS}
+                        icon={<Building2 className="w-3.5 h-3.5" />}
+                    />
                     <span className="w-px h-6 bg-border hidden sm:block" />
-                    <FilterChipGroup value={priceRange} onChange={setPriceRange} options={PRICE_OPTIONS} icon={<Wallet className="w-3.5 h-3.5" />} />
-                    <span className="w-px h-6 bg-border hidden sm:block" />
-                    <FilterChipGroup value={minBedrooms} onChange={setMinBedrooms} options={BEDROOMS_OPTIONS} icon={<Bed className="w-3.5 h-3.5" />} />
+                    <FilterChipGroup
+                        value={minBedrooms}
+                        onChange={(v) => updateParams({ dormitorios: v })}
+                        options={BEDROOMS_OPTIONS}
+                        icon={<Bed className="w-3.5 h-3.5" />}
+                    />
                 </div>
 
                 {/* Secondary controls row */}
@@ -345,7 +339,16 @@ export function PropertiesClient({ initialProperties, cardStyle }: PropertiesCli
                     </div>
 
                     <p className="text-sm text-muted-foreground">
-                        <span className="font-bold text-foreground">{filteredProperties.length}</span> propiedades
+                        {showLoading ? (
+                            <span className="flex items-center gap-2">
+                                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                Buscando...
+                            </span>
+                        ) : (
+                            <>
+                                <span className="font-bold text-foreground">{total}</span> propiedades
+                            </>
+                        )}
                     </p>
                 </div>
             </div>
@@ -366,14 +369,13 @@ export function PropertiesClient({ initialProperties, cardStyle }: PropertiesCli
                                 <label className="text-xs font-medium text-muted-foreground mb-1.5 flex items-center gap-1">
                                     <Building2 className="w-3 h-3" /> Ciudad
                                 </label>
-                                <select
+                                <input
+                                    type="text"
+                                    placeholder="Ej: Yerba Buena"
                                     value={city}
-                                    onChange={e => setCity(e.target.value)}
+                                    onChange={e => updateParams({ ciudad: e.target.value })}
                                     className="w-full bg-background border border-border rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-brand outline-none"
-                                >
-                                    <option value="">Todas</option>
-                                    {cities.map(c => <option key={c} value={c}>{c}</option>)}
-                                </select>
+                                />
                             </div>
 
                             {/* Neighborhood */}
@@ -381,14 +383,13 @@ export function PropertiesClient({ initialProperties, cardStyle }: PropertiesCli
                                 <label className="text-xs font-medium text-muted-foreground mb-1.5 flex items-center gap-1">
                                     <MapPin className="w-3 h-3" /> Barrio
                                 </label>
-                                <select
+                                <input
+                                    type="text"
+                                    placeholder="Ej: Centro"
                                     value={neighborhood}
-                                    onChange={e => setNeighborhood(e.target.value)}
+                                    onChange={e => updateParams({ barrio: e.target.value })}
                                     className="w-full bg-background border border-border rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-brand outline-none"
-                                >
-                                    <option value="">Todos</option>
-                                    {neighborhoods.map(n => <option key={n} value={n}>{n}</option>)}
-                                </select>
+                                />
                             </div>
 
                             {/* Bathrooms */}
@@ -398,7 +399,7 @@ export function PropertiesClient({ initialProperties, cardStyle }: PropertiesCli
                                 </label>
                                 <select
                                     value={minBathrooms}
-                                    onChange={e => setMinBathrooms(e.target.value)}
+                                    onChange={e => updateParams({ banos: e.target.value })}
                                     className="w-full bg-background border border-border rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-brand outline-none"
                                 >
                                     <option value="any">Cualquiera</option>
@@ -415,7 +416,7 @@ export function PropertiesClient({ initialProperties, cardStyle }: PropertiesCli
                                 </label>
                                 <select
                                     value={minGarage}
-                                    onChange={e => setMinGarage(e.target.value)}
+                                    onChange={e => updateParams({ cocheras: e.target.value })}
                                     className="w-full bg-background border border-border rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-brand outline-none"
                                 >
                                     <option value="any">Cualquiera</option>
@@ -433,7 +434,7 @@ export function PropertiesClient({ initialProperties, cardStyle }: PropertiesCli
                                     type="number"
                                     placeholder="0"
                                     value={minArea}
-                                    onChange={e => setMinArea(e.target.value)}
+                                    onChange={e => updateParams({ supMin: e.target.value })}
                                     className="w-full bg-background border border-border rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-brand outline-none"
                                 />
                             </div>
@@ -445,9 +446,49 @@ export function PropertiesClient({ initialProperties, cardStyle }: PropertiesCli
                                     type="number"
                                     placeholder="∞"
                                     value={maxArea}
-                                    onChange={e => setMaxArea(e.target.value)}
+                                    onChange={e => updateParams({ supMax: e.target.value })}
                                     className="w-full bg-background border border-border rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-brand outline-none"
                                 />
+                            </div>
+
+                            {/* Price Range */}
+                            <div>
+                                <label className="text-xs font-medium text-muted-foreground mb-1.5 flex items-center gap-1">
+                                    <Wallet className="w-3 h-3" /> Precio mín
+                                </label>
+                                <input
+                                    type="number"
+                                    placeholder="0"
+                                    value={precioMin}
+                                    onChange={e => updateParams({ precioMin: e.target.value })}
+                                    className="w-full bg-background border border-border rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-brand outline-none"
+                                />
+                            </div>
+                            <div>
+                                <label className="text-xs font-medium text-muted-foreground mb-1.5 flex items-center gap-1">
+                                    <Wallet className="w-3 h-3" /> Precio máx
+                                </label>
+                                <input
+                                    type="number"
+                                    placeholder="∞"
+                                    value={precioMax}
+                                    onChange={e => updateParams({ precioMax: e.target.value })}
+                                    className="w-full bg-background border border-border rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-brand outline-none"
+                                />
+                            </div>
+                            <div>
+                                <label className="text-xs font-medium text-muted-foreground mb-1.5 flex items-center gap-1">
+                                    <Wallet className="w-3 h-3" /> Moneda
+                                </label>
+                                <select
+                                    value={moneda}
+                                    onChange={e => updateParams({ moneda: e.target.value })}
+                                    className="w-full bg-background border border-border rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-brand outline-none"
+                                >
+                                    <option value="">Todas</option>
+                                    <option value="USD">USD</option>
+                                    <option value="ARS">ARS</option>
+                                </select>
                             </div>
 
                             {/* Condition */}
@@ -455,7 +496,7 @@ export function PropertiesClient({ initialProperties, cardStyle }: PropertiesCli
                                 <label className="text-xs font-medium text-muted-foreground mb-1.5 block">Estado</label>
                                 <select
                                     value={condition}
-                                    onChange={e => setCondition(e.target.value)}
+                                    onChange={e => updateParams({ estado: e.target.value })}
                                     className="w-full bg-background border border-border rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-brand outline-none"
                                 >
                                     <option value="all">Cualquiera</option>
@@ -466,56 +507,124 @@ export function PropertiesClient({ initialProperties, cardStyle }: PropertiesCli
                             </div>
 
                             {/* Amenities */}
-                            {allAmenities.length > 0 && (
-                                <div className="col-span-full">
-                                    <label className="text-xs font-medium text-muted-foreground mb-1.5 block">Amenidades</label>
-                                    <div className="flex flex-wrap gap-2">
-                                        {allAmenities.map(a => (
-                                            <button
-                                                key={a}
-                                                onClick={() => toggleAmenity(a)}
-                                                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${selectedAmenities.includes(a)
-                                                    ? 'bg-brand/10 text-brand'
-                                                    : 'bg-muted text-muted-foreground hover:text-foreground'
-                                                    }`}
-                                            >
-                                                {a.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}
-                                            </button>
-                                        ))}
-                                    </div>
+                            <div className="col-span-full">
+                                <label className="text-xs font-medium text-muted-foreground mb-1.5 block">Amenidades</label>
+                                <div className="flex flex-wrap gap-2">
+                                    {AMENITIES_LIST.map(a => (
+                                        <button
+                                            key={a}
+                                            onClick={() => toggleAmenity(a)}
+                                            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${selectedAmenities.includes(a)
+                                                ? 'bg-brand/10 text-brand'
+                                                : 'bg-muted text-muted-foreground hover:text-foreground'
+                                                }`}
+                                        >
+                                            {a.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}
+                                        </button>
+                                    ))}
                                 </div>
-                            )}
+                            </div>
                         </div>
                     </motion.div>
                 )}
             </AnimatePresence>
 
+            {/* Relaxed Results Banner */}
+            <AnimatePresence>
+                {relaxed && relaxedMessage && !showLoading && (
+                    <motion.div
+                        initial={{ opacity: 0, y: -10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: -10 }}
+                        className="mb-6 flex items-center gap-3 px-5 py-3 bg-amber-500/10 border border-amber-500/20 rounded-xl text-sm text-amber-200"
+                    >
+                        <AlertTriangle className="w-4 h-4 text-amber-400 flex-shrink-0" />
+                        {relaxedMessage}
+                    </motion.div>
+                )}
+            </AnimatePresence>
+
             {/* Property Grid */}
-            {filteredProperties.length > 0 ? (
-                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-                    {filteredProperties.map((property, index) => (
-                        <PropertyCard
-                            key={property.id}
-                            property={property}
-                            cardStyle={cardStyle}
-                            index={index}
-                        />
-                    ))}
-                </div>
-            ) : (
-                <div className="flex flex-col items-center justify-center py-20 bg-muted/30 rounded-3xl border border-dashed border-border text-center">
-                    <div className="w-16 h-16 bg-background rounded-full flex items-center justify-center shadow-sm mb-4">
-                        <Search className="w-8 h-8 text-muted-foreground p-1" />
+            <div className={`transition-opacity duration-200 ${showLoading ? 'opacity-50 pointer-events-none' : 'opacity-100'}`}>
+                {properties.length > 0 ? (
+                    <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+                        {properties.map((property, index) => (
+                            <PropertyCard
+                                key={property.id}
+                                property={property}
+                                cardStyle={cardStyle}
+                                index={index}
+                            />
+                        ))}
                     </div>
-                    <h3 className="text-xl font-heading font-medium mb-2 text-foreground">No encontramos propiedades</h3>
-                    <p className="text-muted-foreground max-w-md">No hay resultados que coincidan con tu búsqueda. Intentá cambiar los filtros o los términos de búsqueda.</p>
-                    <button onClick={clearAll} className="mt-4 text-brand font-medium text-sm hover:underline">
-                        Limpiar todos los filtros
+                ) : !showLoading ? (
+                    <div className="flex flex-col items-center justify-center py-20 bg-muted/30 rounded-3xl border border-dashed border-border text-center">
+                        <div className="w-16 h-16 bg-background rounded-full flex items-center justify-center shadow-sm mb-4">
+                            <Search className="w-8 h-8 text-muted-foreground p-1" />
+                        </div>
+                        <h3 className="text-xl font-heading font-medium mb-2 text-foreground">No encontramos propiedades</h3>
+                        <p className="text-muted-foreground max-w-md">No hay resultados que coincidan con tu búsqueda. Intentá cambiar los filtros o los términos de búsqueda.</p>
+                        <button onClick={clearAll} className="mt-4 text-brand font-medium text-sm hover:underline">
+                            Limpiar todos los filtros
+                        </button>
+                    </div>
+                ) : null}
+            </div>
+
+            {/* Pagination */}
+            {totalPages > 1 && !showLoading && (
+                <div className="flex items-center justify-center gap-2 mt-10">
+                    <button
+                        onClick={() => goToPage(currentPage - 1)}
+                        disabled={currentPage <= 1}
+                        className="p-2 rounded-xl border border-border hover:bg-muted transition-colors disabled:opacity-30 disabled:pointer-events-none"
+                    >
+                        <ChevronLeft className="w-4 h-4" />
+                    </button>
+
+                    {Array.from({ length: totalPages }, (_, i) => i + 1)
+                        .filter(page => {
+                            // Show first, last, and pages around current
+                            if (page === 1 || page === totalPages) return true;
+                            if (Math.abs(page - currentPage) <= 2) return true;
+                            return false;
+                        })
+                        .reduce<(number | 'dots')[]>((acc, page, idx, arr) => {
+                            if (idx > 0 && page - (arr[idx - 1] as number) > 1) {
+                                acc.push('dots');
+                            }
+                            acc.push(page);
+                            return acc;
+                        }, [])
+                        .map((item, idx) => (
+                            item === 'dots' ? (
+                                <span key={`dots-${idx}`} className="px-2 text-muted-foreground">…</span>
+                            ) : (
+                                <button
+                                    key={item}
+                                    onClick={() => goToPage(item as number)}
+                                    className={`w-10 h-10 rounded-xl text-sm font-medium transition-all ${currentPage === item
+                                        ? 'bg-brand text-white shadow-lg shadow-brand/20'
+                                        : 'border border-border hover:bg-muted text-foreground'
+                                        }`}
+                                >
+                                    {item}
+                                </button>
+                            )
+                        ))
+                    }
+
+                    <button
+                        onClick={() => goToPage(currentPage + 1)}
+                        disabled={currentPage >= totalPages}
+                        className="p-2 rounded-xl border border-border hover:bg-muted transition-colors disabled:opacity-30 disabled:pointer-events-none"
+                    >
+                        <ChevronRight className="w-4 h-4" />
                     </button>
                 </div>
             )}
 
-            {/* Sticky AI Search Bar at Bottom (Claude / ChatGPT Premium Style) */}
+            {/* Sticky AI Search Bar at Bottom */}
             {mounted && typeof document !== 'undefined' && createPortal(
                 <div className="fixed bottom-6 w-full z-50 pointer-events-none flex justify-center px-4" style={{ left: 0 }}>
                     <motion.div
@@ -549,7 +658,7 @@ export function PropertiesClient({ initialProperties, cardStyle }: PropertiesCli
 
                         {aiQuery && !isAiSearching && (
                             <button
-                                onClick={() => { setAiQuery(''); setAiSearchTerm(''); }}
+                                onClick={() => { setAiQuery(''); clearAll(); }}
                                 className="p-2 rounded-full hover:bg-muted text-muted-foreground transition-colors"
                             >
                                 <X className="w-4 h-4" />

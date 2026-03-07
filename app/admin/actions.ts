@@ -70,6 +70,75 @@ export async function rejectProperty(id: string) {
     revalidatePath("/admin/propiedades");
 }
 
+export async function bulkApproveProperties(ids: string[]) {
+    const supabase = await createClient();
+    const { error } = await supabase
+        .from("properties")
+        .update({ approval_status: 'approved', published: true })
+        .in("id", ids);
+
+    if (error) throw new Error(error.message);
+    revalidatePath("/admin");
+    revalidatePath("/admin/propiedades");
+    revalidatePath("/propiedades");
+    revalidatePath("/");
+    return { count: ids.length };
+}
+
+export async function bulkRejectProperties(ids: string[]) {
+    const supabase = await createClient();
+    const { error } = await supabase
+        .from("properties")
+        .update({ approval_status: 'rejected', published: false })
+        .in("id", ids);
+
+    if (error) throw new Error(error.message);
+    revalidatePath("/admin");
+    revalidatePath("/admin/propiedades");
+    return { count: ids.length };
+}
+
+export async function bulkDeleteProperties(ids: string[]) {
+    const supabase = await createClient();
+    const { error } = await supabase
+        .from("properties")
+        .delete()
+        .in("id", ids);
+
+    if (error) throw new Error(error.message);
+    revalidatePath("/admin");
+    revalidatePath("/admin/propiedades");
+    revalidatePath("/propiedades");
+    revalidatePath("/");
+    return { count: ids.length };
+}
+
+export async function bulkToggleFeature(ids: string[], featured: boolean) {
+    const supabase = await createClient();
+    const { error } = await supabase
+        .from("properties")
+        .update({ is_featured: featured })
+        .in("id", ids);
+
+    if (error) throw new Error(error.message);
+    revalidatePath("/admin");
+    revalidatePath("/admin/propiedades");
+    revalidatePath("/");
+    return { count: ids.length };
+}
+
+export async function markAllMessagesRead() {
+    const supabase = await createClient();
+    const { error } = await supabase
+        .from("contacts")
+        .update({ status: 'read' })
+        .eq("status", "new");
+
+    if (error) throw new Error(error.message);
+    revalidatePath("/admin/mensajes");
+    revalidatePath("/admin");
+}
+
 export async function updateSiteSettings(formData: FormData) {
     const supabase = await createClient();
 

@@ -6,6 +6,24 @@ const openai = new OpenAI({
     apiKey: process.env.OPENAI_API_KEY,
 });
 
+const DEFAULT_PARAMS = {
+    searchTerm: '',
+    propertyType: 'all',
+    minBedrooms: 'any',
+    minBathrooms: 'any',
+    minGarage: 'any',
+    minArea: '',
+    maxArea: '',
+    condition: 'all',
+    amenities: [],
+    precioMin: null,
+    precioMax: null,
+    moneda: null,
+    operationType: 'all',
+    city: '',
+    neighborhood: '',
+};
+
 export async function POST(req: Request) {
     try {
         const { query } = await req.json();
@@ -16,19 +34,8 @@ export async function POST(req: Request) {
 
         if (!process.env.OPENAI_API_KEY) {
             return NextResponse.json({
+                ...DEFAULT_PARAMS,
                 searchTerm: query,
-                propertyType: 'all',
-                minBedrooms: 'any',
-                minBathrooms: 'any',
-                minGarage: 'any',
-                minArea: '',
-                maxArea: '',
-                condition: 'all',
-                amenities: [],
-                priceRange: 'all',
-                operationType: 'all',
-                city: '',
-                neighborhood: '',
             });
         }
 
@@ -51,7 +58,9 @@ Extraé los siguientes parámetros en formato JSON estricto:
 - "maxArea": Máximo de metros cuadrados (ej: "200" si dice "hasta 200m2"). Si no se especifica, "".
 - "condition": Estado de la propiedad. Mapear a: "nuevo" (a estrenar, nuevo), "bueno" (excelente, reciclado), o "a_refaccionar" (para refaccionar, destruir). Si no se especifica, "all".
 - "amenities": Array de strings con amenidades seleccionables. Opciones válidas: "pileta", "quincho", "parrilla", "seguridad", "ascensor", "jardin", "cochera_cubierta", "vestidor", "deposito", "vidriera", "alta_visibilidad", "vista_panoramica", "servicios_completos", "lavadero", "terraza", "calefaccion". Si piden "piscina" -> "pileta", si piden "asador" -> "parrilla". Si no hay amenidades, array vacío [].
-- "priceRange": Solo uno de: "all", "under50k", "50k-100k", "100k-250k", "over250k". Si no se especifica, "all".
+- "precioMin": Número o null. Extraer el mínimo de precio mencionado. Si dicen "desde 50000" -> 50000. Si no se menciona precio, null.
+- "precioMax": Número o null. Extraer el máximo de precio mencionado. Si dicen "hasta 100000" o "menos de 100000" -> 100000. Si dicen "1 millón" o "un millón" -> 1000000. Si no se menciona precio, null.
+- "moneda": "ARS" | "USD" | null. Si el usuario dice "pesos", "millón de pesos", "$" sin aclarar -> "ARS". Si dice "dólares", "USD", "dolares", "usd", "verdes", "U$S" -> "USD". Si no especifica moneda, null (buscar en ambas).
 - "operationType": Solo uno de: "all", "venta", "alquiler", "alquiler_temporal". Si no se especifica, "all".
 - "city": Nombre exacto de la ciudad de la lista permitida. Si dicen "centro", usar "San Miguel de Tucumán". Si no se indica, "".
 - "neighborhood": Nombre del barrio si se menciona (ej: "Barrio Norte"). Si no, "".
@@ -77,19 +86,8 @@ IMPORTANTE: Devolvé ÚNICAMENTE un JSON válido, sin delimitadores \`\`\`json n
         } catch (e) {
             console.error("Failed to parse OpenAI response", responseContent);
             parsedParams = {
+                ...DEFAULT_PARAMS,
                 searchTerm: query,
-                propertyType: 'all',
-                minBedrooms: 'any',
-                minBathrooms: 'any',
-                minGarage: 'any',
-                minArea: '',
-                maxArea: '',
-                condition: 'all',
-                amenities: [],
-                priceRange: 'all',
-                operationType: 'all',
-                city: '',
-                neighborhood: '',
             };
         }
 

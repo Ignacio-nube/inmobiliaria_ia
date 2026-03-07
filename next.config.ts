@@ -14,6 +14,10 @@ const nextConfig: NextConfig = {
       {
         protocol: 'https',
         hostname: 'qozeysaoyyjjgonqjjwq.supabase.co',
+      },
+      {
+        protocol: 'https',
+        hostname: 'tucumanpropiedades.com.ar',
       }
     ],
   },

@@ -1,13 +1,18 @@
 import { createClient } from '@/lib/supabase/server';
 import { notFound } from 'next/navigation';
 import Image from 'next/image';
-import { MapPin, Bed, Bath, Square, Calendar, ArrowLeft, Car, Ruler, Wrench, DollarSign, Tag } from 'lucide-react';
+import { MapPin, Bed, Bath, Square, Calendar, ArrowLeft, Car, Ruler, Wrench, DollarSign, Tag, Clock } from 'lucide-react';
 import Link from 'next/link';
 import { ContactForm } from '@/components/properties/ContactForm';
 import { PropertyMap } from '@/components/properties/PropertyMap';
 import { PropertyChat } from '@/components/properties/PropertyChat';
 import { TrackPageView } from '@/components/analytics/TrackPageView';
 import { Logo } from '@/components/ui/Logo';
+import { PropertyGallery } from '@/components/properties/PropertyGallery';
+import { SimilarProperties } from '@/components/properties/SimilarProperties';
+import { Database } from '@/lib/database.types';
+
+type Property = Database['public']['Tables']['properties']['Row'];
 
 export const revalidate = 60;
 
@@ -36,6 +41,43 @@ function formatAmenity(a: string): string {
     return a.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
 }
 
+// Amenity → emoji icon map
+const AMENITY_ICONS: Record<string, string> = {
+    pileta: '💧',
+    piscina: '💧',
+    cochera: '🚗',
+    garage: '🚗',
+    gimnasio: '💪',
+    gym: '💪',
+    jardin: '🌳',
+    jardín: '🌳',
+    parrilla: '🔥',
+    quincho: '🔥',
+    seguridad: '🔒',
+    vigilancia: '🔒',
+    laundry: '👕',
+    lavadero: '👕',
+    balcon: '🏗️',
+    balcón: '🏗️',
+    terraza: '☀️',
+    sum: '🏠',
+    salon_de_usos_multiples: '🏠',
+    ascensor: '🛗',
+    calefaccion: '🌡️',
+    calefacción: '🌡️',
+    aire_acondicionado: '❄️',
+    aire: '❄️',
+    wifi: '📶',
+    estacionamiento: '🅿️',
+    mascotas: '🐾',
+    amoblado: '🛋️',
+};
+
+function getAmenityIcon(amenity: string): string {
+    const key = amenity.toLowerCase().replace(/\s+/g, '_');
+    return AMENITY_ICONS[key] || '✨';
+}
+
 const OPERATION_LABELS: Record<string, string> = {
     venta: 'En Venta',
     alquiler: 'En Alquiler',
@@ -47,6 +89,45 @@ const CONDITION_LABELS: Record<string, string> = {
     bueno: 'Buen Estado',
     a_refaccionar: 'A Refaccionar',
 };
+
+// ─── Similar Properties Query ───────────────────────────────
+async function getSimilarProperties(
+    current: Property,
+    supabase: Awaited<ReturnType<typeof createClient>>
+): Promise<{ data: Property[]; matchedByCity: boolean }> {
+    // Attempt 1: same type + operation + city (highest relevance)
+    const { data: data1 } = await supabase
+        .from('properties')
+        .select('*')
+        .eq('published', true)
+        .eq('approval_status', 'approved')
+        .ilike('property_type', `%${current.property_type}%`)
+        .ilike('operation_type', `%${current.operation_type}%`)
+        .ilike('city', `%${current.city}%`)
+        .neq('id', current.id)
+        .order('is_featured', { ascending: false })
+        .order('created_at', { ascending: false })
+        .limit(8);
+
+    if (data1 && data1.length >= 3) {
+        return { data: data1, matchedByCity: true };
+    }
+
+    // Attempt 2: same type + operation (no city restriction)
+    const { data: data2 } = await supabase
+        .from('properties')
+        .select('*')
+        .eq('published', true)
+        .eq('approval_status', 'approved')
+        .ilike('property_type', `%${current.property_type}%`)
+        .ilike('operation_type', `%${current.operation_type}%`)
+        .neq('id', current.id)
+        .order('is_featured', { ascending: false })
+        .order('created_at', { ascending: false })
+        .limit(8);
+
+    return { data: data2 ?? [], matchedByCity: false };
+}
 
 export default async function PropertyDetailPage({ params }: { params: Promise<{ id: string }> }) {
     const { id } = await params;
@@ -69,6 +150,12 @@ export default async function PropertyDetailPage({ params }: { params: Promise<{
     if (error || !property) {
         notFound();
     }
+
+    // Fetch similar properties in parallel
+    const { data: similarProperties, matchedByCity } = await getSimilarProperties(
+        property as Property,
+        supabase
+    );
 
     const agencyName = property.agencies?.name || "Ignacio Propiedades";
     const agencyEmail = property.agencies?.contact_email || "contacto@ignaciopropiedades.com";
@@ -168,80 +255,62 @@ export default async function PropertyDetailPage({ params }: { params: Promise<{
                 </div>
 
                 {/* Image Gallery */}
-                <div className="mb-12">
-                    {property.images && property.images.length > 0 ? (
-                        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 h-[500px]">
-                            <div className="md:col-span-3 relative rounded-3xl overflow-hidden h-full">
-                                <Image src={property.images[0]} alt={property.title} fill className="object-cover" priority />
-                            </div>
-                            <div className="hidden md:flex flex-col gap-4 h-full">
-                                {property.images.slice(1, 3).map((img, idx) => (
-                                    <div key={idx} className="relative flex-1 rounded-3xl overflow-hidden">
-                                        <Image src={img} alt={`Vista ${idx + 2}`} fill className="object-cover" />
-                                    </div>
-                                ))}
-                                {property.images.length === 1 && (
-                                    <div className="relative flex-1 rounded-3xl overflow-hidden bg-muted flex items-center justify-center border border-border">
-                                        <span className="text-muted-foreground font-medium text-sm">Sin más fotos</span>
-                                    </div>
-                                )}
-                            </div>
-                        </div>
-                    ) : (
-                        <div className="w-full h-[500px] bg-muted rounded-3xl flex items-center justify-center border border-dashed border-border text-muted-foreground">
-                            Sin imágenes disponibles
-                        </div>
-                    )}
-                </div>
+                <PropertyGallery images={property.images || []} title={property.title} />
 
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-12">
                     {/* Main Content */}
                     <div className="lg:col-span-2 space-y-12">
 
-                        {/* Features Grid */}
+                        {/* Features — Compact Row */}
                         <section>
-                            <h2 className="text-2xl font-heading font-medium mb-6">Características</h2>
-                            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                            <h2 className="text-2xl font-heading font-medium mb-4">Características</h2>
+                            <div className="flex flex-wrap items-center bg-card rounded-2xl border border-border divide-x divide-border">
                                 {property.bedrooms !== null && property.bedrooms > 0 && (
-                                    <FeatureCard icon={<Bed className="w-6 h-6 text-brand" />} value={`${property.bedrooms}`} label="Dormitorios" />
+                                    <FeatureStat icon={<Bed className="w-4 h-4 text-brand" />} value={`${property.bedrooms}`} label="Dormitorios" />
                                 )}
                                 {property.bathrooms !== null && property.bathrooms > 0 && (
-                                    <FeatureCard icon={<Bath className="w-6 h-6 text-brand" />} value={`${property.bathrooms}`} label="Baños" />
+                                    <FeatureStat icon={<Bath className="w-4 h-4 text-brand" />} value={`${property.bathrooms}`} label="Baños" />
                                 )}
                                 {property.square_meters && (
-                                    <FeatureCard icon={<Square className="w-6 h-6 text-brand" />} value={`${property.square_meters}`} label="m² Cubiertos" />
+                                    <FeatureStat icon={<Square className="w-4 h-4 text-brand" />} value={`${property.square_meters} m²`} label="Cubiertos" />
                                 )}
                                 {property.lot_meters && (
-                                    <FeatureCard icon={<Ruler className="w-6 h-6 text-brand" />} value={`${property.lot_meters}`} label="m² Terreno" />
+                                    <FeatureStat icon={<Ruler className="w-4 h-4 text-brand" />} value={`${property.lot_meters} m²`} label="Terreno" />
                                 )}
                                 {property.garage !== null && property.garage > 0 && (
-                                    <FeatureCard icon={<Car className="w-6 h-6 text-brand" />} value={`${property.garage}`} label="Cocheras" />
+                                    <FeatureStat icon={<Car className="w-4 h-4 text-brand" />} value={`${property.garage}`} label="Cocheras" />
                                 )}
                                 {property.year_built && (
-                                    <FeatureCard icon={<Calendar className="w-6 h-6 text-brand" />} value={`${property.year_built}`} label="Año Construcción" />
+                                    <FeatureStat icon={<Clock className="w-4 h-4 text-brand" />} value={`${new Date().getFullYear() - property.year_built} años`} label="Antigüedad" />
                                 )}
                                 {property.condition && (
-                                    <FeatureCard icon={<Wrench className="w-6 h-6 text-brand" />} value={CONDITION_LABELS[property.condition] || property.condition} label="Estado" />
+                                    <FeatureStat icon={<Wrench className="w-4 h-4 text-brand" />} value={CONDITION_LABELS[property.condition] || property.condition} label="Estado" />
                                 )}
                                 {property.operation_type && (
-                                    <FeatureCard icon={<Tag className="w-6 h-6 text-brand" />} value={OPERATION_LABELS[property.operation_type] || property.operation_type} label="Operación" />
+                                    <FeatureStat icon={<Tag className="w-4 h-4 text-brand" />} value={OPERATION_LABELS[property.operation_type] || property.operation_type} label="Operación" />
                                 )}
                             </div>
                         </section>
 
                         {/* Amenities */}
-                        {property.amenities && property.amenities.length > 0 && (
-                            <section>
-                                <h2 className="text-2xl font-heading font-medium mb-6">Amenidades</h2>
-                                <div className="flex flex-wrap gap-2">
-                                    {property.amenities.map(a => (
-                                        <span key={a} className="px-4 py-2 bg-muted rounded-xl text-sm font-medium text-foreground">
-                                            {formatAmenity(a)}
-                                        </span>
-                                    ))}
-                                </div>
-                            </section>
-                        )}
+                        {(() => {
+                            const validAmenities = (property.amenities || []).filter(
+                                a => a && a.length > 1 && !/^[<>\/]/.test(a.trim())
+                            );
+                            return validAmenities.length > 0 ? (
+                                <section>
+                                    <h2 className="text-2xl font-heading font-medium mb-4">Amenidades</h2>
+                                    <div className="flex flex-wrap gap-2">
+                                        {validAmenities.map((a, idx) => (
+                                            <span key={`${a}-${idx}`} className="inline-flex items-center gap-1.5 px-4 py-2 bg-brand/10 text-brand rounded-xl text-sm font-medium">
+                                                <span className="text-base">{getAmenityIcon(a)}</span>
+                                                {formatAmenity(a)}
+                                            </span>
+                                        ))}
+                                    </div>
+                                </section>
+                            ) : null;
+                        })()}
 
                         {/* Description */}
                         <section>
@@ -273,7 +342,7 @@ export default async function PropertyDetailPage({ params }: { params: Promise<{
 
                     {/* Sidebar / Contact */}
                     <div className="lg:col-span-1">
-                        <div className="sticky top-28 bg-card border border-border rounded-3xl shadow-sm overflow-hidden">
+                        <div className="sticky top-24 bg-card border border-border rounded-3xl shadow-sm overflow-hidden">
                             {/* Property thumbnail */}
                             {property.images && property.images.length > 0 && (
                                 <div className="relative w-full h-48">
@@ -293,32 +362,43 @@ export default async function PropertyDetailPage({ params }: { params: Promise<{
 
                             <div className="p-6">
                                 {/* Agency info */}
-                                <div className="text-center mb-6">
+                                <div className="text-center mb-5">
                                     <h3 className="font-semibold text-lg text-foreground">{agencyName}</h3>
                                     <p className="text-muted-foreground text-sm">Agente Inmobiliario</p>
                                 </div>
 
-                                <div className="space-y-3 mb-8">
-                                    <a
-                                        href={`mailto:${agencyEmail}`}
-                                        className="flex items-center justify-center gap-2 w-full py-3 px-4 rounded-xl border border-border hover:bg-muted transition-colors font-medium text-sm"
-                                    >
-                                        <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4 text-muted-foreground flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                                            <path strokeLinecap="round" strokeLinejoin="round" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-                                        </svg>
-                                        <span className="truncate">{agencyEmail}</span>
-                                    </a>
-                                    <a
-                                        href={`https://wa.me/${agencyPhone.replace(/\D/g, '')}`}
-                                        target="_blank"
-                                        rel="noreferrer"
-                                        className="flex items-center justify-center gap-2 w-full py-3 rounded-xl bg-green-600 hover:bg-green-700 text-white transition-colors font-medium text-sm"
-                                    >
-                                        <svg className="w-4 h-4 flex-shrink-0" viewBox="0 0 24 24" fill="currentColor">
-                                            <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.878-.788-1.47-1.761-1.643-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51a12.8 12.8 0 0 0-.57-.01h-.008c-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 0 1-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 0 1-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 0 1 2.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0 0 12.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 0 0 5.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 0 0-3.48-8.413z" />
-                                        </svg>
-                                        Contactar por WhatsApp
-                                    </a>
+                                {/* WhatsApp — prominent */}
+                                <a
+                                    href={`https://wa.me/${agencyPhone.replace(/\D/g, '')}?text=${encodeURIComponent(`Hola, me interesa la propiedad "${property.title}". ¿Podrían darme más información?`)}`}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    className="flex items-center justify-center gap-2.5 w-full py-4 rounded-xl bg-green-600 hover:bg-green-700 text-white transition-colors font-semibold text-base shadow-lg shadow-green-600/20"
+                                >
+                                    <svg className="w-5 h-5 flex-shrink-0" viewBox="0 0 24 24" fill="currentColor">
+                                        <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.878-.788-1.47-1.761-1.643-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51a12.8 12.8 0 0 0-.57-.01h-.008c-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 0 1-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 0 1-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 0 1 2.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0 0 12.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 0 0 5.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 0 0-3.48-8.413z" />
+                                    </svg>
+                                    Contactar por WhatsApp
+                                </a>
+
+                                {/* Email link */}
+                                <a
+                                    href={`mailto:${agencyEmail}`}
+                                    className="flex items-center justify-center gap-2 w-full py-2.5 mt-3 rounded-xl border border-border hover:bg-muted transition-colors font-medium text-sm text-muted-foreground"
+                                >
+                                    <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                        <path strokeLinecap="round" strokeLinejoin="round" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                                    </svg>
+                                    <span className="truncate">{agencyEmail}</span>
+                                </a>
+
+                                {/* Separator */}
+                                <div className="relative my-6">
+                                    <div className="absolute inset-0 flex items-center">
+                                        <div className="w-full border-t border-border" />
+                                    </div>
+                                    <div className="relative flex justify-center text-xs">
+                                        <span className="bg-card px-3 text-muted-foreground">O dejanos un mensaje</span>
+                                    </div>
                                 </div>
 
                                 <ContactForm propertyId={property.id} propertyTitle={property.title} />
@@ -329,18 +409,30 @@ export default async function PropertyDetailPage({ params }: { params: Promise<{
                 </div>
             </div>
 
+            {/* Similar Properties */}
+            {similarProperties.length > 0 && (
+                <SimilarProperties
+                    properties={similarProperties}
+                    currentCity={property.city}
+                    currentType={property.property_type}
+                    matchedByCity={matchedByCity}
+                />
+            )}
+
             {/* Chatbot */}
             <PropertyChat property={property} />
         </div>
     );
 }
 
-function FeatureCard({ icon, value, label }: { icon: React.ReactNode; value: string; label: string }) {
+function FeatureStat({ icon, value, label }: { icon: React.ReactNode; value: string; label: string }) {
     return (
-        <div className="bg-card rounded-2xl p-4 flex flex-col items-center justify-center text-center gap-2">
+        <div className="flex items-center gap-2.5 px-5 py-4">
             {icon}
-            <span className="font-semibold text-foreground text-lg">{value}</span>
-            <span className="text-muted-foreground text-xs uppercase tracking-wider">{label}</span>
+            <div className="flex flex-col">
+                <span className="font-semibold text-foreground text-sm leading-tight">{value}</span>
+                <span className="text-muted-foreground text-xs">{label}</span>
+            </div>
         </div>
     );
 }
