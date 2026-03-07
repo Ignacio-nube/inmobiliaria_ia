@@ -36,18 +36,18 @@ export function PropertyCard({ property, cardStyle, index = 0 }: PropertyCardPro
     return (
         <Link href={`/propiedades/${property.id}`} className="block h-full">
             <motion.div
-                initial={{ opacity: 0, y: 40 }}
+                initial={{ opacity: 0, y: 12 }}
                 whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true, margin: "-80px" }}
+                viewport={{ once: true, margin: "-40px" }}
                 transition={{
-                    duration: 0.55,
-                    delay: index * 0.15,
-                    ease: [0.22, 1, 0.36, 1],
+                    duration: 0.3,
+                    delay: Math.min(index, 5) * 0.03,
+                    ease: "easeOut",
                 }}
                 whileHover={{
-                    y: -8,
-                    boxShadow: "0 20px 40px rgba(0,0,0,0.3)",
-                    transition: { type: "spring", stiffness: 300, damping: 22 },
+                    y: -6,
+                    boxShadow: "0 16px 32px rgba(0,0,0,0.25)",
+                    transition: { type: "spring", stiffness: 400, damping: 25 },
                 }}
                 style={{ willChange: "transform" }}
                 className={`group relative overflow-hidden bg-card text-card-foreground border border-border cursor-pointer flex flex-col h-full ${isClassic
