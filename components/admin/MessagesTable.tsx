@@ -244,13 +244,20 @@ export function MessagesTable({ messages }: { messages: Contact[] }) {
         });
     };
 
-    const handleMarkAllRead = async () => {
+    const handleMarkAllRead = () => {
         if (counts.new === 0) return;
+        const count = counts.new;
         setMarkingAll(true);
         startTransition(async () => {
-            await markAllMessagesRead();
-            toast.success(`${counts.new} mensajes marcados como leídos ✓`);
-            setMarkingAll(false);
+            try {
+                await markAllMessagesRead();
+                toast.success(`${count} mensajes marcados como leídos ✓`);
+            } catch (err) {
+                toast.error("Error al marcar mensajes como leídos");
+                console.error(err);
+            } finally {
+                setMarkingAll(false);
+            }
         });
     };
 
